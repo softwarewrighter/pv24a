@@ -328,6 +328,367 @@ op_over:
     la r0, vm_loop
     jmp (r0)
 
+; ============================================================
+; Arithmetic / Logic opcode handlers (0x10-0x1B)
+; ============================================================
+
+; 0x10 — add: ( a b -- a+b )
+op_add:
+    lw r0, 3(fp)
+    lw r1, -6(r0)
+    lw r2, -3(r0)
+    add r1, r2
+    sw r1, -6(r0)
+    add r0, -3
+    sw r0, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x11 — sub: ( a b -- a-b )
+op_sub:
+    lw r0, 3(fp)
+    lw r1, -6(r0)
+    lw r2, -3(r0)
+    sub r1, r2
+    sw r1, -6(r0)
+    add r0, -3
+    sw r0, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x12 — mul: ( a b -- a*b )
+op_mul:
+    lw r0, 3(fp)
+    lw r1, -6(r0)
+    lw r2, -3(r0)
+    mul r1, r2
+    sw r1, -6(r0)
+    add r0, -3
+    sw r0, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x13 — div: ( a b -- a/b ) signed, traps on b=0
+op_div:
+    lw r0, 3(fp)
+    lw r1, -6(r0)
+    lw r2, -3(r0)
+    push r0
+    ceq r2, z
+    brf div_ok
+    pop r0
+    lc r0, 2
+    sw r0, 21(fp)
+    lc r0, 1
+    sw r0, 24(fp)
+    la r0, vm_loop
+    jmp (r0)
+div_ok:
+    ; Compute sign of result: xor sign bits of a and b
+    mov r0, r1
+    xor r0, r2
+    push r0
+    ; Take |a|
+    cls r1, z
+    brf div_abs_a
+    lc r0, 0
+    sub r0, r1
+    mov r1, r0
+div_abs_a:
+    ; Take |b|
+    cls r2, z
+    brf div_abs_b
+    push r1
+    lc r1, 0
+    sub r1, r2
+    mov r2, r1
+    pop r1
+div_abs_b:
+    ; Unsigned divide: |a| / |b| by repeated subtraction
+    lc r0, 0
+div_loop:
+    clu r1, r2
+    brt div_done
+    sub r1, r2
+    add r0, 1
+    bra div_loop
+div_done:
+    ; r0 = quotient
+    mov r1, r0
+    ; Apply sign: negate if sign indicator < 0
+    pop r0
+    cls r0, z
+    brf div_pos
+    lc r0, 0
+    sub r0, r1
+    mov r1, r0
+div_pos:
+    pop r0
+    sw r1, -6(r0)
+    add r0, -3
+    sw r0, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x14 — mod: ( a b -- a%b ) signed, remainder sign = dividend sign
+op_mod:
+    lw r0, 3(fp)
+    lw r1, -6(r0)
+    lw r2, -3(r0)
+    push r0
+    ceq r2, z
+    brf mod_ok
+    pop r0
+    lc r0, 2
+    sw r0, 21(fp)
+    lc r0, 1
+    sw r0, 24(fp)
+    la r0, vm_loop
+    jmp (r0)
+mod_ok:
+    ; Save sign of dividend (remainder sign = dividend sign)
+    cls r1, z
+    brf mod_sign_pos
+    lc r0, 1
+    push r0
+    bra mod_sign_set
+mod_sign_pos:
+    lc r0, 0
+    push r0
+mod_sign_set:
+    ; Take |a|
+    cls r1, z
+    brf mod_abs_a
+    lc r0, 0
+    sub r0, r1
+    mov r1, r0
+mod_abs_a:
+    ; Take |b|
+    cls r2, z
+    brf mod_abs_b
+    push r1
+    lc r1, 0
+    sub r1, r2
+    mov r2, r1
+    pop r1
+mod_abs_b:
+    ; Unsigned mod: |a| % |b|
+mod_loop:
+    clu r1, r2
+    brt mod_done
+    sub r1, r2
+    bra mod_loop
+mod_done:
+    ; r1 = |remainder|
+    pop r0
+    ceq r0, z
+    brt mod_pos
+    lc r0, 0
+    sub r0, r1
+    mov r1, r0
+mod_pos:
+    pop r0
+    sw r1, -6(r0)
+    add r0, -3
+    sw r0, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x15 — neg: ( a -- -a )
+op_neg:
+    lw r0, 3(fp)
+    lw r1, -3(r0)
+    lc r0, 0
+    sub r0, r1
+    lw r2, 3(fp)
+    sw r0, -3(r2)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x16 — and: ( a b -- a&b )
+op_and:
+    lw r0, 3(fp)
+    lw r1, -6(r0)
+    lw r2, -3(r0)
+    and r1, r2
+    sw r1, -6(r0)
+    add r0, -3
+    sw r0, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x17 — or: ( a b -- a|b )
+op_or:
+    lw r0, 3(fp)
+    lw r1, -6(r0)
+    lw r2, -3(r0)
+    or r1, r2
+    sw r1, -6(r0)
+    add r0, -3
+    sw r0, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x18 — xor: ( a b -- a^b )
+op_xor:
+    lw r0, 3(fp)
+    lw r1, -6(r0)
+    lw r2, -3(r0)
+    xor r1, r2
+    sw r1, -6(r0)
+    add r0, -3
+    sw r0, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x19 — not: ( a -- ~a ) bitwise complement via xor with -1
+op_not:
+    lw r0, 3(fp)
+    lw r1, -3(r0)
+    la r0, -1
+    xor r0, r1
+    lw r2, 3(fp)
+    sw r0, -3(r2)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x1A — shl: ( a n -- a<<n )
+op_shl:
+    lw r0, 3(fp)
+    lw r1, -6(r0)
+    lw r2, -3(r0)
+    shl r1, r2
+    sw r1, -6(r0)
+    add r0, -3
+    sw r0, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x1B — shr: ( a n -- a>>n ) arithmetic shift right
+op_shr:
+    lw r0, 3(fp)
+    lw r1, -6(r0)
+    lw r2, -3(r0)
+    sra r1, r2
+    sw r1, -6(r0)
+    add r0, -3
+    sw r0, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; ============================================================
+; Comparison opcode handlers (0x20-0x25)
+; All pop two values, push 1 (true) or 0 (false)
+; ============================================================
+
+; 0x20 — eq: ( a b -- flag ) a == b
+op_eq:
+    lw r0, 3(fp)
+    lw r1, -6(r0)
+    lw r2, -3(r0)
+    ceq r1, r2
+    brt eq_true
+    lc r1, 0
+    bra eq_done
+eq_true:
+    lc r1, 1
+eq_done:
+    sw r1, -6(r0)
+    add r0, -3
+    sw r0, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x21 — ne: ( a b -- flag ) a != b
+op_ne:
+    lw r0, 3(fp)
+    lw r1, -6(r0)
+    lw r2, -3(r0)
+    ceq r1, r2
+    brf ne_true
+    lc r1, 0
+    bra ne_done
+ne_true:
+    lc r1, 1
+ne_done:
+    sw r1, -6(r0)
+    add r0, -3
+    sw r0, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x22 — lt: ( a b -- flag ) a < b (signed)
+op_lt:
+    lw r0, 3(fp)
+    lw r1, -6(r0)
+    lw r2, -3(r0)
+    cls r1, r2
+    brt lt_true
+    lc r1, 0
+    bra lt_done
+lt_true:
+    lc r1, 1
+lt_done:
+    sw r1, -6(r0)
+    add r0, -3
+    sw r0, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x23 — le: ( a b -- flag ) a <= b (signed) = !(b < a)
+op_le:
+    lw r0, 3(fp)
+    lw r1, -6(r0)
+    lw r2, -3(r0)
+    cls r2, r1
+    brf le_true
+    lc r1, 0
+    bra le_done
+le_true:
+    lc r1, 1
+le_done:
+    sw r1, -6(r0)
+    add r0, -3
+    sw r0, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x24 — gt: ( a b -- flag ) a > b (signed) = b < a
+op_gt:
+    lw r0, 3(fp)
+    lw r1, -6(r0)
+    lw r2, -3(r0)
+    cls r2, r1
+    brt gt_true
+    lc r1, 0
+    bra gt_done
+gt_true:
+    lc r1, 1
+gt_done:
+    sw r1, -6(r0)
+    add r0, -3
+    sw r0, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x25 — ge: ( a b -- flag ) a >= b (signed) = !(a < b)
+op_ge:
+    lw r0, 3(fp)
+    lw r1, -6(r0)
+    lw r2, -3(r0)
+    cls r1, r2
+    brf ge_true
+    lc r1, 0
+    bra ge_done
+ge_true:
+    lc r1, 1
+ge_done:
+    sw r1, -6(r0)
+    add r0, -3
+    sw r0, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
 ; 0x60 — sys id8: system call dispatch
 op_sys:
     ; fp = &vm_state from dispatch
@@ -411,30 +772,30 @@ dispatch_table:
     .word op_invalid
     .word op_invalid
     ; 0x10-0x1B: Arithmetic / Logic
-    .word op_stub
-    .word op_stub
-    .word op_stub
-    .word op_stub
-    .word op_stub
-    .word op_stub
-    .word op_stub
-    .word op_stub
-    .word op_stub
-    .word op_stub
-    .word op_stub
-    .word op_stub
+    .word op_add
+    .word op_sub
+    .word op_mul
+    .word op_div
+    .word op_mod
+    .word op_neg
+    .word op_and
+    .word op_or
+    .word op_xor
+    .word op_not
+    .word op_shl
+    .word op_shr
     ; 0x1C-0x1F: reserved (gap)
     .word op_invalid
     .word op_invalid
     .word op_invalid
     .word op_invalid
     ; 0x20-0x25: Comparison
-    .word op_stub
-    .word op_stub
-    .word op_stub
-    .word op_stub
-    .word op_stub
-    .word op_stub
+    .word op_eq
+    .word op_ne
+    .word op_lt
+    .word op_le
+    .word op_gt
+    .word op_ge
     ; 0x26-0x2F: reserved (gap)
     .word op_invalid
     .word op_invalid
@@ -545,19 +906,33 @@ vm_state:
 ; Memory segments
 ; ============================================================
 
-; Test bytecode: exercises push, push_s, swap, dup, over, drop, sys PUTC, halt
-; push_s 'H', push_s 'i', swap, sys PUTC, sys PUTC,
-; push_s '!', dup, sys PUTC, sys PUTC,
-; push_s 'X', push_s 'Y', over, sys PUTC, drop, drop,
-; push 42, sys PUTC,  (push 24-bit '*')
-; push_s '\n', sys PUTC, halt
-; Expected UART output: Hi!!X*\n
+; Test bytecode: exercises arithmetic, logic, and comparison opcodes
+; Line 1: push_s 7, push_s 6, mul, sys 1 → 42='*' (primary test from step)
+; Line 2: push_s 10, sys 1 → '\n'
+; Line 3: push_s 60, push_s 5, add, sys 1 → 65='A'
+; Line 4: push_s 70, push_s 4, sub, sys 1 → 66='B'
+; Line 5: push_s 67, push_s 1, div, sys 1 → 67='C'
+; Line 6: push_s -68(=188), neg, sys 1 → 68='D'
+; Line 7: push_s 10, sys 1 → '\n'
+; Line 8: push_s 5, push_s 5, eq, push_s 48, add, sys 1 → '1' (5==5)
+; Line 9: push_s 5, push_s 3, lt, push_s 48, add, sys 1 → '0' (5<3 false)
+; Line 10: push_s 3, push_s 5, lt, push_s 48, add, sys 1 → '1' (3<5 true)
+; Line 11: push_s 10, sys 1 → '\n'
+; Line 12: halt
+; Expected UART output: *\nABCD\n101\n
 code_seg:
-    .byte 2, 72, 2, 105, 5, 96, 1, 96, 1
-    .byte 2, 33, 3, 96, 1, 96, 1
-    .byte 2, 88, 2, 89, 6, 96, 1, 4, 4
-    .byte 1, 42, 0, 0, 96, 1
-    .byte 2, 10, 96, 1, 0
+    .byte 2, 7, 2, 6, 18, 96, 1
+    .byte 2, 10, 96, 1
+    .byte 2, 60, 2, 5, 16, 96, 1
+    .byte 2, 70, 2, 4, 17, 96, 1
+    .byte 2, 67, 2, 1, 19, 96, 1
+    .byte 2, 188, 21, 96, 1
+    .byte 2, 10, 96, 1
+    .byte 2, 5, 2, 5, 32, 2, 48, 16, 96, 1
+    .byte 2, 5, 2, 3, 34, 2, 48, 16, 96, 1
+    .byte 2, 3, 2, 5, 34, 2, 48, 16, 96, 1
+    .byte 2, 10, 96, 1
+    .byte 0
 
 ; Globals segment (placeholder)
 globals_seg:
