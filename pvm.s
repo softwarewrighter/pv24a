@@ -771,6 +771,312 @@ jnz_skip:
     la r0, vm_loop
     jmp (r0)
 
+; ============================================================
+; Frame management opcode handlers (0x33, 0x34, 0x40, 0x41)
+; ============================================================
+
+; 0x33 — call addr24: save frame header on call stack, jump to procedure
+; Frame header layout (4 words, 12 bytes):
+;   csp+0  = return PC
+;   csp+3  = dynamic link (caller's fp_vm)
+;   csp+6  = static link (0 for now)
+;   csp+9  = saved esp (for arg access)
+op_call:
+    ; fp = &vm_state
+    ; Fetch addr24 (target) from code[pc]
+    lw r0, 18(fp)
+    lw r2, 0(fp)
+    add r0, r2
+    lw r2, 0(r0)
+    ; r2 = target address
+    push r2
+    ; Return PC = pc + 3 (skip past addr24 operand)
+    lw r0, 0(fp)
+    add r0, 3
+    ; Build frame header on call stack
+    lw r2, 6(fp)
+    ; r2 = csp
+    sw r0, 0(r2)
+    ; frame[0] = return PC
+    lw r0, 9(fp)
+    sw r0, 3(r2)
+    ; frame[3] = dynamic link (current fp_vm)
+    lc r0, 0
+    sw r0, 6(r2)
+    ; frame[6] = static link (0, step 007 adds chain)
+    lw r0, 3(fp)
+    sw r0, 9(r2)
+    ; frame[9] = saved esp
+    ; Advance csp by 12 (frame header size)
+    add r2, 12
+    sw r2, 6(fp)
+    ; Set pc = target
+    pop r0
+    sw r0, 0(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x34 — ret nargs8: return from procedure, clean args, handle return value
+; Detects return value by comparing esp to saved_esp
+op_ret:
+    ; fp = &vm_state
+    ; Fetch nargs byte, compute nargs * 3
+    lw r0, 18(fp)
+    lw r2, 0(fp)
+    add r0, r2
+    lbu r2, 0(r0)
+    ; r2 = nargs
+    mov r0, r2
+    add r0, r0
+    add r0, r2
+    ; r0 = nargs * 3
+    la r2, ret_temps
+    sw r0, 0(r2)
+    ; ret_temps[0] = nargs * 3
+    ; Get saved_esp from frame header (fp_vm - 3)
+    lw r0, 9(fp)
+    lw r1, -3(r0)
+    ; r1 = saved_esp
+    la r2, ret_temps
+    sw r1, 3(r2)
+    ; ret_temps[3] = saved_esp
+    ; Check for return value: esp > saved_esp?
+    lw r0, 3(fp)
+    ; r0 = current esp
+    cls r1, r0
+    brf ret_no_rv
+    ; Has return value: save TOS
+    lw r0, -3(r0)
+    ; r0 = retval (eval stack TOS)
+    la r2, ret_temps
+    sw r0, 6(r2)
+    ; ret_temps[6] = retval
+    lc r0, 1
+    sw r0, 9(r2)
+    ; ret_temps[9] = has_rv = 1
+    bra ret_restore
+ret_no_rv:
+    la r2, ret_temps
+    lc r0, 0
+    sw r0, 9(r2)
+    ; ret_temps[9] = has_rv = 0
+ret_restore:
+    ; Restore pc from frame header (fp_vm - 12)
+    lw r0, 9(fp)
+    lw r2, -12(r0)
+    sw r2, 0(fp)
+    ; pc = return PC
+    ; Set csp = fp_vm - 12 (pop entire frame)
+    add r0, -12
+    sw r0, 6(fp)
+    ; Restore fp_vm from dynamic link (fp_vm - 9)
+    lw r0, 9(fp)
+    lw r2, -9(r0)
+    sw r2, 9(fp)
+    ; fp_vm = caller's fp_vm
+    ; Clean args: esp = saved_esp - nargs * 3
+    la r0, ret_temps
+    lw r1, 3(r0)
+    ; r1 = saved_esp
+    lw r2, 0(r0)
+    ; r2 = nargs * 3
+    sub r1, r2
+    sw r1, 3(fp)
+    ; esp = saved_esp - nargs * 3
+    ; Push return value if present
+    la r0, ret_temps
+    lw r2, 9(r0)
+    ceq r2, z
+    brt ret_done
+    ; Push retval onto eval stack
+    lw r2, 6(r0)
+    ; r2 = retval
+    lw r0, 3(fp)
+    ; r0 = esp
+    sw r2, 0(r0)
+    add r0, 3
+    sw r0, 3(fp)
+ret_done:
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x40 — enter nlocals8: set fp_vm = csp, reserve local slots
+op_enter:
+    ; fp = &vm_state
+    ; Fetch nlocals byte
+    lw r0, 18(fp)
+    lw r2, 0(fp)
+    add r0, r2
+    lbu r2, 0(r0)
+    ; r2 = nlocals
+    push r2
+    ; Advance pc by 1
+    lw r0, 0(fp)
+    add r0, 1
+    sw r0, 0(fp)
+    ; fp_vm = csp
+    lw r0, 6(fp)
+    sw r0, 9(fp)
+    ; csp += nlocals * 3
+    pop r2
+    ; r2 = nlocals
+    mov r0, r2
+    add r0, r0
+    add r0, r2
+    ; r0 = nlocals * 3
+    lw r2, 6(fp)
+    add r2, r0
+    sw r2, 6(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x41 — leave: discard locals (csp = fp_vm)
+op_leave:
+    ; fp = &vm_state
+    lw r0, 9(fp)
+    sw r0, 6(fp)
+    ; csp = fp_vm
+    la r0, vm_loop
+    jmp (r0)
+
+; ============================================================
+; Local / Argument access opcode handlers (0x42, 0x43, 0x48, 0x49)
+; ============================================================
+
+; 0x42 — loadl off8: push local variable onto eval stack
+; Address = fp_vm + offset * 3
+op_loadl:
+    ; fp = &vm_state
+    lw r0, 18(fp)
+    lw r2, 0(fp)
+    add r0, r2
+    lbu r2, 0(r0)
+    ; r2 = offset
+    ; Advance pc by 1
+    lw r0, 0(fp)
+    add r0, 1
+    sw r0, 0(fp)
+    ; Compute fp_vm + offset * 3
+    mov r0, r2
+    add r0, r0
+    add r0, r2
+    ; r0 = offset * 3
+    lw r2, 9(fp)
+    add r0, r2
+    ; r0 = fp_vm + offset * 3
+    lw r2, 0(r0)
+    ; r2 = local value
+    ; Push onto eval stack
+    lw r0, 3(fp)
+    sw r2, 0(r0)
+    add r0, 3
+    sw r0, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x43 — storel off8: pop eval stack into local variable
+op_storel:
+    ; fp = &vm_state
+    lw r0, 18(fp)
+    lw r2, 0(fp)
+    add r0, r2
+    lbu r2, 0(r0)
+    ; r2 = offset
+    ; Compute target: fp_vm + offset * 3
+    mov r0, r2
+    add r0, r0
+    add r0, r2
+    ; r0 = offset * 3
+    lw r2, 9(fp)
+    add r0, r2
+    ; r0 = target address
+    push r0
+    ; Advance pc by 1
+    lw r0, 0(fp)
+    add r0, 1
+    sw r0, 0(fp)
+    ; Pop value from eval stack
+    lw r2, 3(fp)
+    add r2, -3
+    sw r2, 3(fp)
+    lw r0, 0(r2)
+    ; r0 = value
+    pop r2
+    ; r2 = target address
+    sw r0, 0(r2)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x48 — loada idx8: push argument onto eval stack
+; Args on eval stack below saved_esp: arg[idx] = saved_esp - (idx+1)*3
+op_loada:
+    ; fp = &vm_state
+    lw r0, 18(fp)
+    lw r2, 0(fp)
+    add r0, r2
+    lbu r2, 0(r0)
+    ; r2 = idx
+    ; Advance pc by 1
+    lw r0, 0(fp)
+    add r0, 1
+    sw r0, 0(fp)
+    ; Compute (idx + 1) * 3
+    add r2, 1
+    mov r0, r2
+    add r0, r0
+    add r0, r2
+    ; r0 = (idx + 1) * 3
+    ; Get saved_esp from frame (fp_vm - 3)
+    lw r2, 9(fp)
+    lw r2, -3(r2)
+    ; r2 = saved_esp
+    sub r2, r0
+    ; r2 = arg address
+    lw r0, 0(r2)
+    ; r0 = arg value
+    ; Push onto eval stack
+    lw r2, 3(fp)
+    sw r0, 0(r2)
+    add r2, 3
+    sw r2, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x49 — storea idx8: pop eval stack into argument
+op_storea:
+    ; fp = &vm_state
+    lw r0, 18(fp)
+    lw r2, 0(fp)
+    add r0, r2
+    lbu r2, 0(r0)
+    ; r2 = idx
+    ; Advance pc by 1
+    lw r0, 0(fp)
+    add r0, 1
+    sw r0, 0(fp)
+    ; Compute (idx + 1) * 3
+    add r2, 1
+    mov r0, r2
+    add r0, r0
+    add r0, r2
+    ; r0 = (idx + 1) * 3
+    ; Get saved_esp from frame (fp_vm - 3)
+    lw r2, 9(fp)
+    lw r2, -3(r2)
+    sub r2, r0
+    ; r2 = arg address
+    push r2
+    ; Pop value from eval stack
+    lw r2, 3(fp)
+    add r2, -3
+    sw r2, 3(fp)
+    lw r0, 0(r2)
+    ; r0 = value
+    pop r2
+    sw r0, 0(r2)
+    la r0, vm_loop
+    jmp (r0)
+
 ; 0x60 — sys id8: system call dispatch
 op_sys:
     ; fp = &vm_state from dispatch
@@ -893,8 +1199,8 @@ dispatch_table:
     .word op_jmp
     .word op_jz
     .word op_jnz
-    .word op_stub
-    .word op_stub
+    .word op_call
+    .word op_ret
     .word op_stub
     ; 0x36-0x3F: reserved (gap)
     .word op_invalid
@@ -908,16 +1214,16 @@ dispatch_table:
     .word op_invalid
     .word op_invalid
     ; 0x40-0x4B: Local / Global / Nonlocal Access
+    .word op_enter
+    .word op_leave
+    .word op_loadl
+    .word op_storel
     .word op_stub
     .word op_stub
     .word op_stub
     .word op_stub
-    .word op_stub
-    .word op_stub
-    .word op_stub
-    .word op_stub
-    .word op_stub
-    .word op_stub
+    .word op_loada
+    .word op_storea
     .word op_stub
     .word op_stub
     ; 0x4C-0x4F: reserved (gap)
@@ -962,6 +1268,19 @@ msg_trap:
     ; "TRAP\n\0"
 
 ; ============================================================
+; Temporary storage for ret handler (4 words = 12 bytes)
+; ============================================================
+ret_temps:
+    .word 0
+    ; [0] nargs * 3
+    .word 0
+    ; [3] saved_esp
+    .word 0
+    ; [6] retval
+    .word 0
+    ; [9] has_rv flag
+
+; ============================================================
 ; VM state struct (9 words = 27 bytes)
 ; ============================================================
 vm_state:
@@ -988,53 +1307,142 @@ vm_state:
 ; Memory segments
 ; ============================================================
 
-; Test bytecode: exercises control flow opcodes (jmp, jz, jnz)
-; Countdown loop: push 5, print each digit, decrement, loop until 0
+; Test bytecode: factorial(5) = 120 = 'x'
+; Exercises call/ret/enter/leave/loada frame management
 ;
-; Offset  Bytes           Instruction
-; 0       02, 05          push_s 5
-; 2       03              dup              ; loop:
-; 3       49, 20, 0, 0    jz 20           ; → done
-; 7       03              dup
-; 8       02, 48          push_s 48        ; '0'
-; 10      16              add
-; 11      96, 01          sys 1            ; putc digit
-; 13      02, 01          push_s 1
-; 15      17              sub
-; 16      48, 02, 0, 0    jmp 2           ; → loop
-; 20      04              drop             ; done:
-; 21      02, 10          push_s 10        ; '\n'
-; 23      96, 01          sys 1
-; 25      00              halt
+; main:
+;   0: push_s 5          02, 05
+;   2: call 13           51, 13, 0, 0     ; call factorial
+;   6: sys 1             96, 01            ; putc result (120='x')
+;   8: push_s 10         02, 10            ; '\n'
+;  10: sys 1             96, 01
+;  12: halt              00
 ;
-; Expected UART output: 54321\n
+; factorial (offset 13):
+;  13: enter 0           64, 00
+;  15: loada 0           72, 00            ; push n
+;  17: dup               03
+;  18: push_s 1          02, 01
+;  20: le                35                ; n <= 1?
+;  21: jz 31             49, 31, 0, 0     ; if false, recurse
+;  25: drop              04                ; base case
+;  26: push_s 1          02, 01            ; return 1
+;  28: leave             65
+;  29: ret 1             52, 01
+;
+; recurse (offset 31):
+;  31: loada 0           72, 00            ; n (for mul)
+;  33: loada 0           72, 00            ; n
+;  35: push_s 1          02, 01
+;  37: sub               17                ; n-1
+;  38: call 13           51, 13, 0, 0     ; factorial(n-1)
+;  42: mul               18                ; n * factorial(n-1)
+;  43: leave             65
+;  44: ret 1             52, 01
+;
+; Expected UART output: x\n
 code_seg:
+    ; main
     .byte 2, 5
-    .byte 3
-    .byte 49, 20, 0, 0
-    .byte 3
-    .byte 2, 48
-    .byte 16
+    .byte 51, 13, 0, 0
     .byte 96, 1
-    .byte 2, 1
-    .byte 17
-    .byte 48, 2, 0, 0
-    .byte 4
     .byte 2, 10
     .byte 96, 1
     .byte 0
+    ; factorial
+    .byte 64, 0
+    .byte 72, 0
+    .byte 3
+    .byte 2, 1
+    .byte 35
+    .byte 49, 31, 0, 0
+    .byte 4
+    .byte 2, 1
+    .byte 65
+    .byte 52, 1
+    ; recurse
+    .byte 72, 0
+    .byte 72, 0
+    .byte 2, 1
+    .byte 17
+    .byte 51, 13, 0, 0
+    .byte 18
+    .byte 65
+    .byte 52, 1
 
-; Globals segment (placeholder)
+; Globals segment (placeholder, 3 bytes)
 globals_seg:
-    .byte 0
+    .word 0
 
-; Call stack (grows upward from here)
+; Call stack (grows upward, 96 bytes for nested frames)
 call_stack:
-    .byte 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
 
-; Eval stack (grows upward from here)
+; Eval stack (grows upward, 96 bytes)
 eval_stack:
-    .byte 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
 
 ; Heap (grows upward from here)
 heap_seg:
