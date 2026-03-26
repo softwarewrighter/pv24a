@@ -75,6 +75,6 @@ cor24-run --run pvm.s --trace 100 --speed 0
 
 ## License
 
-MIT
+MIT -- see [LICENSE](LICENSE) for details.
 
-Copyright (c) 2026 Michael A. Wright
+Copyright (c) 2026 Michael A Wright
