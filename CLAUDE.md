@@ -78,7 +78,10 @@ curl -s http://localhost:7402/api/pages/PV24A
 #   PV24A                — this project's wiki page
 ```
 
-Always use CAS (If-Match + ETag) when writing. See `docs/agent-cas-wiki.md` for details.
+**Prefer PATCH for edits** — PATCH makes surgical line-level changes and avoids
+overwriting other agents' edits. Use PUT only for new pages or full rewrites. If PATCH
+returns 405, fall back to PUT with If-Match CAS. Always include the ETag.
+See `docs/agent-cas-wiki.md` for full API reference (PATCH ops, CAS protocol, retry logic).
 
 ## Related Projects
 
