@@ -78,10 +78,9 @@ curl -s http://localhost:7402/api/pages/PV24A
 #   PV24A                — this project's wiki page
 ```
 
-**Prefer PATCH for edits** — PATCH makes surgical line-level changes and avoids
-overwriting other agents' edits. Use PUT only for new pages or full rewrites. If PATCH
-returns 405, fall back to PUT with If-Match CAS. Always include the ETag.
-See `docs/agent-cas-wiki.md` for full API reference (PATCH ops, CAS protocol, retry logic).
+**Use PATCH for edits** — PATCH makes surgical line-level changes (replace, append_after,
+insert_before, delete) and avoids overwriting other agents' work. Use PUT only for creating
+new pages. Always include the ETag. See `docs/agent-cas-wiki.md` for full API reference.
 
 ## Related Projects
 
