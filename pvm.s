@@ -1007,6 +1007,130 @@ op_storel:
     la r0, vm_loop
     jmp (r0)
 
+; 0x44 — loadg off24: load global at word offset, push onto eval stack
+op_loadg:
+    ; fp = &vm_state
+    ; Read 3-byte offset from code[pc]
+    lw r0, 18(fp)
+    lw r2, 0(fp)
+    add r0, r2
+    lw r2, 0(r0)
+    ; r2 = off24 (word index)
+    ; Advance pc by 3
+    lw r0, 0(fp)
+    add r0, 3
+    sw r0, 0(fp)
+    ; Compute gp + offset * 3
+    mov r0, r2
+    add r0, r0
+    add r0, r2
+    ; r0 = offset * 3
+    lw r2, 12(fp)
+    add r0, r2
+    ; r0 = gp + offset * 3
+    lw r2, 0(r0)
+    ; r2 = global value
+    ; Push onto eval stack
+    lw r0, 3(fp)
+    sw r2, 0(r0)
+    add r0, 3
+    sw r0, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x45 — storeg off24: pop eval stack, store to global at word offset
+op_storeg:
+    ; fp = &vm_state
+    ; Read 3-byte offset from code[pc]
+    lw r0, 18(fp)
+    lw r2, 0(fp)
+    add r0, r2
+    lw r2, 0(r0)
+    ; r2 = off24 (word index)
+    ; Compute target: gp + offset * 3
+    mov r0, r2
+    add r0, r0
+    add r0, r2
+    ; r0 = offset * 3
+    lw r2, 12(fp)
+    add r0, r2
+    ; r0 = target address
+    push r0
+    ; Advance pc by 3
+    lw r0, 0(fp)
+    add r0, 3
+    sw r0, 0(fp)
+    ; Pop value from eval stack
+    lw r2, 3(fp)
+    add r2, -3
+    sw r2, 3(fp)
+    lw r0, 0(r2)
+    ; r0 = value
+    pop r2
+    ; r2 = target address
+    sw r0, 0(r2)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x46 — addrl off8: push address of local onto eval stack
+op_addrl:
+    ; fp = &vm_state
+    lw r0, 18(fp)
+    lw r2, 0(fp)
+    add r0, r2
+    lbu r2, 0(r0)
+    ; r2 = offset
+    ; Advance pc by 1
+    lw r0, 0(fp)
+    add r0, 1
+    sw r0, 0(fp)
+    ; Compute fp_vm + offset * 3
+    mov r0, r2
+    add r0, r0
+    add r0, r2
+    ; r0 = offset * 3
+    lw r2, 9(fp)
+    add r0, r2
+    ; r0 = address of local
+    ; Push onto eval stack
+    mov r2, r0
+    lw r0, 3(fp)
+    sw r2, 0(r0)
+    add r0, 3
+    sw r0, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x47 — addrg off24: push address of global onto eval stack
+op_addrg:
+    ; fp = &vm_state
+    ; Read 3-byte offset from code[pc]
+    lw r0, 18(fp)
+    lw r2, 0(fp)
+    add r0, r2
+    lw r2, 0(r0)
+    ; r2 = off24 (word index)
+    ; Advance pc by 3
+    lw r0, 0(fp)
+    add r0, 3
+    sw r0, 0(fp)
+    ; Compute gp + offset * 3
+    mov r0, r2
+    add r0, r0
+    add r0, r2
+    ; r0 = offset * 3
+    lw r2, 12(fp)
+    add r0, r2
+    ; r0 = address of global
+    ; Push onto eval stack
+    mov r2, r0
+    lw r0, 3(fp)
+    sw r2, 0(r0)
+    add r0, 3
+    sw r0, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
 ; 0x48 — loada idx8: push argument onto eval stack
 ; Args on eval stack below saved_esp: arg[idx] = saved_esp - (idx+1)*3
 op_loada:
@@ -1074,6 +1198,88 @@ op_storea:
     ; r0 = value
     pop r2
     sw r0, 0(r2)
+    la r0, vm_loop
+    jmp (r0)
+
+; ============================================================
+; Indirect Memory Access opcode handlers (0x50-0x53)
+; ============================================================
+
+; 0x50 — load: ( addr -- val ) load word from address
+op_load:
+    ; fp = &vm_state
+    ; Pop address from eval stack
+    lw r2, 3(fp)
+    add r2, -3
+    sw r2, 3(fp)
+    lw r0, 0(r2)
+    ; r0 = address
+    lw r2, 0(r0)
+    ; r2 = value at address
+    ; Push onto eval stack
+    lw r0, 3(fp)
+    sw r2, 0(r0)
+    add r0, 3
+    sw r0, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x51 — store: ( val addr -- ) store word to address
+op_store:
+    ; fp = &vm_state
+    ; Pop addr from eval stack
+    lw r2, 3(fp)
+    add r2, -3
+    lw r0, 0(r2)
+    ; r0 = addr
+    push r0
+    ; Pop val from eval stack
+    add r2, -3
+    sw r2, 3(fp)
+    lw r0, 0(r2)
+    ; r0 = val
+    pop r2
+    ; r2 = addr
+    sw r0, 0(r2)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x52 — loadb: ( addr -- byte ) load byte zero-extended
+op_loadb:
+    ; fp = &vm_state
+    ; Pop address from eval stack
+    lw r2, 3(fp)
+    add r2, -3
+    sw r2, 3(fp)
+    lw r0, 0(r2)
+    ; r0 = address
+    lbu r2, 0(r0)
+    ; r2 = byte (zero-extended)
+    ; Push onto eval stack
+    lw r0, 3(fp)
+    sw r2, 0(r0)
+    add r0, 3
+    sw r0, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x53 — storeb: ( byte addr -- ) store byte to address
+op_storeb:
+    ; fp = &vm_state
+    ; Pop addr from eval stack
+    lw r2, 3(fp)
+    add r2, -3
+    lw r0, 0(r2)
+    ; r0 = addr
+    push r0
+    ; Pop byte from eval stack
+    add r2, -3
+    sw r2, 3(fp)
+    lw r0, 0(r2)
+    ; r0 = byte value
+    pop r2
+    ; r2 = addr
+    sb r0, 0(r2)
     la r0, vm_loop
     jmp (r0)
 
@@ -1218,10 +1424,10 @@ dispatch_table:
     .word op_leave
     .word op_loadl
     .word op_storel
-    .word op_stub
-    .word op_stub
-    .word op_stub
-    .word op_stub
+    .word op_loadg
+    .word op_storeg
+    .word op_addrl
+    .word op_addrg
     .word op_loada
     .word op_storea
     .word op_stub
@@ -1232,10 +1438,10 @@ dispatch_table:
     .word op_invalid
     .word op_invalid
     ; 0x50-0x53: Indirect Memory Access
-    .word op_stub
-    .word op_stub
-    .word op_stub
-    .word op_stub
+    .word op_load
+    .word op_store
+    .word op_loadb
+    .word op_storeb
     ; 0x54-0x5F: reserved (gap)
     .word op_invalid
     .word op_invalid
@@ -1307,71 +1513,48 @@ vm_state:
 ; Memory segments
 ; ============================================================
 
-; Test bytecode: factorial(5) = 120 = 'x'
-; Exercises call/ret/enter/leave/loada frame management
+; Test bytecode: globals store/load, indirect memory access
+; Exercises loadg/storeg/addrg and load/store/loadb/storeb
 ;
-; main:
-;   0: push_s 5          02, 05
-;   2: call 13           51, 13, 0, 0     ; call factorial
-;   6: sys 1             96, 01            ; putc result (120='x')
-;   8: push_s 10         02, 10            ; '\n'
-;  10: sys 1             96, 01
-;  12: halt              00
+;  0: push_s 65         02, 65            ; 'A'
+;  2: storeg 0          69, 0, 0, 0       ; globals[0] = 'A'
+;  6: loadg 0           68, 0, 0, 0       ; push globals[0]
+; 10: sys 1             96, 01            ; PUTC 'A'
+; 12: push_s 66         02, 66            ; 'B'
+; 14: addrg 0           71, 0, 0, 0       ; push &globals[0]
+; 18: store             81                ; *(&globals[0]) = 'B'
+; 19: addrg 0           71, 0, 0, 0       ; push &globals[0]
+; 23: load              80                ; load *(&globals[0]) = 'B'
+; 24: sys 1             96, 01            ; PUTC 'B'
+; 26: push_s 10         02, 10            ; '\n'
+; 28: sys 1             96, 01            ; PUTC '\n'
+; 30: halt              00
 ;
-; factorial (offset 13):
-;  13: enter 0           64, 00
-;  15: loada 0           72, 00            ; push n
-;  17: dup               03
-;  18: push_s 1          02, 01
-;  20: le                35                ; n <= 1?
-;  21: jz 31             49, 31, 0, 0     ; if false, recurse
-;  25: drop              04                ; base case
-;  26: push_s 1          02, 01            ; return 1
-;  28: leave             65
-;  29: ret 1             52, 01
-;
-; recurse (offset 31):
-;  31: loada 0           72, 00            ; n (for mul)
-;  33: loada 0           72, 00            ; n
-;  35: push_s 1          02, 01
-;  37: sub               17                ; n-1
-;  38: call 13           51, 13, 0, 0     ; factorial(n-1)
-;  42: mul               18                ; n * factorial(n-1)
-;  43: leave             65
-;  44: ret 1             52, 01
-;
-; Expected UART output: x\n
+; Expected UART output: AB\n
 code_seg:
-    ; main
-    .byte 2, 5
-    .byte 51, 13, 0, 0
+    .byte 2, 65
+    .byte 69, 0, 0, 0
+    .byte 68, 0, 0, 0
+    .byte 96, 1
+    .byte 2, 66
+    .byte 71, 0, 0, 0
+    .byte 81
+    .byte 71, 0, 0, 0
+    .byte 80
     .byte 96, 1
     .byte 2, 10
     .byte 96, 1
     .byte 0
-    ; factorial
-    .byte 64, 0
-    .byte 72, 0
-    .byte 3
-    .byte 2, 1
-    .byte 35
-    .byte 49, 31, 0, 0
-    .byte 4
-    .byte 2, 1
-    .byte 65
-    .byte 52, 1
-    ; recurse
-    .byte 72, 0
-    .byte 72, 0
-    .byte 2, 1
-    .byte 17
-    .byte 51, 13, 0, 0
-    .byte 18
-    .byte 65
-    .byte 52, 1
 
-; Globals segment (placeholder, 3 bytes)
+; Globals segment (8 words = 24 bytes)
 globals_seg:
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
     .word 0
 
 ; Call stack (grows upward, 96 bytes for nested frames)
