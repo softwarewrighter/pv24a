@@ -1499,6 +1499,8 @@ op_storeb:
     jmp (r0)
 
 ; 0x60 — sys id8: system call dispatch
+; Uses sys_id_temp to preserve sys id across comparisons.
+; All handlers expect fp = &vm_state on entry.
 op_sys:
     ; fp = &vm_state from dispatch
     ; Fetch sys ID byte
@@ -1511,13 +1513,77 @@ op_sys:
     lw r0, 0(fp)
     add r0, 1
     sw r0, 0(fp)
-    ; Dispatch on sys id
+    ; Save sys id to temp memory (so we can use both r0/r2 freely)
+    push fp
+    la r0, sys_id_temp
+    push r0
+    pop fp
+    sw r2, 0(fp)
+    pop fp
+    ; fp = &vm_state again
+    ; Dispatch: id == 0 (HALT)?
     mov r0, r2
+    ceq r0, z
+    brt sys_halt
+    ; id == 1 (PUTC)?
     lc r2, 1
     ceq r0, r2
     brt sys_putc
+    ; Reload sys id for further checks
+    push fp
+    la r0, sys_id_temp
+    push r0
+    pop fp
+    lw r0, 0(fp)
+    pop fp
+    ; id == 2 (GETC)?
+    lc r2, 2
+    ceq r0, r2
+    brt sys_getc
+    ; Reload sys id
+    push fp
+    la r0, sys_id_temp
+    push r0
+    pop fp
+    lw r0, 0(fp)
+    pop fp
+    ; id == 3 (LED)?
+    lc r2, 3
+    ceq r0, r2
+    brt sys_led
+    ; Reload sys id
+    push fp
+    la r0, sys_id_temp
+    push r0
+    pop fp
+    lw r0, 0(fp)
+    pop fp
+    ; id == 4 (ALLOC)?
+    lc r2, 4
+    ceq r0, r2
+    brt sys_alloc_j
+    ; id == 5 (FREE)?
+    lc r2, 5
+    ceq r0, r2
+    brt sys_free_j
     ; Unknown sys id — trap
     la r0, op_invalid
+    jmp (r0)
+
+; Jump trampolines for far handlers
+sys_alloc_j:
+    la r0, sys_alloc
+    jmp (r0)
+sys_free_j:
+    la r0, sys_free
+    jmp (r0)
+
+; sys HALT (id=0): stop VM execution
+sys_halt:
+    ; fp = &vm_state
+    lc r0, 1
+    sw r0, 21(fp)
+    la r0, vm_loop
     jmp (r0)
 
 ; sys PUTC (id=1): pop char from eval stack, send to UART
@@ -1537,6 +1603,112 @@ sys_putc_wait:
     brt sys_putc_wait
     pop r0
     sb r0, 0(r2)
+    la r0, vm_loop
+    jmp (r0)
+
+; sys GETC (id=2): read byte from UART, push onto eval stack
+sys_getc:
+    ; Poll UART status until RX ready (bit 0)
+sys_getc_wait:
+    la r2, -65280
+    lbu r0, 1(r2)
+    ; bit 0 = RX ready; mask it
+    lc r2, 1
+    and r0, r2
+    ceq r0, z
+    brt sys_getc_wait
+    ; RX ready — read data byte
+    la r2, -65280
+    lbu r0, 0(r2)
+    ; r0 = received byte; push onto eval stack
+    la r2, vm_state
+    push r2
+    pop fp
+    lw r2, 3(fp)
+    ; r2 = esp
+    sw r0, 0(r2)
+    add r2, 3
+    sw r2, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; sys LED (id=3): pop state from eval stack, write to LED port
+sys_led:
+    ; fp = &vm_state
+    lw r2, 3(fp)
+    add r2, -3
+    sw r2, 3(fp)
+    ; r2 = new esp = &TOS
+    lw r0, 0(r2)
+    ; r0 = LED state
+    la r2, -65024
+    sb r0, 0(r2)
+    la r0, vm_loop
+    jmp (r0)
+
+; sys ALLOC (id=4): pop size, bump-allocate, push pointer
+; Uses nonlocal_temps as scratch: [0]=size, [3]=old hp (return ptr)
+sys_alloc:
+    la r0, vm_state
+    push r0
+    pop fp
+    ; Pop size from eval stack
+    lw r2, 3(fp)
+    add r2, -3
+    sw r2, 3(fp)
+    lw r0, 0(r2)
+    ; r0 = size
+    ; Save size to nonlocal_temps[0]
+    la r2, nonlocal_temps
+    push r2
+    pop fp
+    sw r0, 0(fp)
+    ; Load current hp and save as return pointer to nonlocal_temps[3]
+    la r0, vm_state
+    push r0
+    pop fp
+    lw r0, 15(fp)
+    ; r0 = old hp (allocated pointer)
+    la r2, nonlocal_temps
+    push r2
+    pop fp
+    sw r0, 3(fp)
+    ; Compute new hp = old_hp + size
+    lw r2, 0(fp)
+    ; r2 = size
+    add r0, r2
+    ; r0 = new hp
+    ; Store new hp to vm_state.hp
+    la r2, vm_state
+    push r2
+    pop fp
+    sw r0, 15(fp)
+    ; Push old hp (allocated pointer) onto eval stack
+    la r2, nonlocal_temps
+    push r2
+    pop fp
+    lw r0, 3(fp)
+    ; r0 = allocated pointer
+    la r2, vm_state
+    push r2
+    pop fp
+    lw r2, 3(fp)
+    ; r2 = esp
+    sw r0, 0(r2)
+    add r2, 3
+    sw r2, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; sys FREE (id=5): pop ptr, no-op (bump allocator doesn't free)
+sys_free:
+    la r0, vm_state
+    push r0
+    pop fp
+    ; Pop ptr from eval stack and discard
+    lw r2, 3(fp)
+    add r2, -3
+    sw r2, 3(fp)
     la r0, vm_loop
     jmp (r0)
 
@@ -1704,6 +1876,10 @@ ret_temps:
 ; ============================================================
 ; Temporary storage for nonlocal handlers (3 words = 9 bytes)
 ; ============================================================
+; Temporary storage for sys dispatch (1 word = 3 bytes)
+sys_id_temp:
+    .word 0
+
 nonlocal_temps:
     .word 0
     ; [0] depth
@@ -1739,75 +1915,58 @@ vm_state:
 ; Memory segments
 ; ============================================================
 
-; Test bytecode: globals store/load, indirect memory access
-; Exercises loadg/storeg/addrg and load/store/loadb/storeb
+; Test bytecode: syscalls — LED, GETC echo, heap alloc/write/read, HALT
+; Provide UART input "A" for GETC test
+; Expected UART output: AX\n
 ;
-;  0: push_s 65         02, 65            ; 'A'
-;  2: storeg 0          69, 0, 0, 0       ; globals[0] = 'A'
-;  6: loadg 0           68, 0, 0, 0       ; push globals[0]
-; 10: sys 1             96, 01            ; PUTC 'A'
-; 12: push_s 66         02, 66            ; 'B'
-; 14: addrg 0           71, 0, 0, 0       ; push &globals[0]
-; 18: store             81                ; *(&globals[0]) = 'B'
-; 19: addrg 0           71, 0, 0, 0       ; push &globals[0]
-; 23: load              80                ; load *(&globals[0]) = 'B'
-; 24: sys 1             96, 01            ; PUTC 'B'
-; 26: push_s 10         02, 10            ; '\n'
-; 28: sys 1             96, 01            ; PUTC '\n'
-; 30: halt              00
-;
-; Expected UART output: AB\n
-; Test: 2-level nested procedure with nonlocal access
-; Expected output: *!\n  (outer stores '*' in local, inner reads it,
-; modifies to '!', reads back)
-;
-; main:       byte 0: call outer(5)     51, 5, 0, 0
-;             byte 4: halt               0
-; outer:      byte 5: enter 1           64, 1
-;             byte 7: push_s 42         2, 42
-;             byte 9: storel 0          67, 0
-;             byte 11: calln 0, inner(18) 53, 0, 18, 0, 0
-;             byte 16: ret 0            52, 0
-; inner:      byte 18: enter 0          64, 0
-;             byte 20: loadn 1, 0       74, 1, 0
-;             byte 23: sys 1            96, 1
-;             byte 25: push_s 33        2, 33
-;             byte 27: storen 1, 0      75, 1, 0
-;             byte 30: loadn 1, 0       74, 1, 0
-;             byte 33: sys 1            96, 1
-;             byte 35: push_s 10        2, 10
-;             byte 37: sys 1            96, 1
-;             byte 39: ret 0            52, 0
+;  0: push_s 1       02, 1         ; LED state = 1
+;  2: sys 3          96, 3         ; LED(1) — turn on
+;  4: push_s 0       02, 0         ; LED state = 0
+;  6: sys 3          96, 3         ; LED(0) — turn off
+;  8: sys 2          96, 2         ; GETC -> char on stack
+; 10: sys 1          96, 1         ; PUTC echo char
+; 12: push_s 3       02, 3         ; size = 3 bytes
+; 14: sys 4          96, 4         ; ALLOC(3) -> ptr
+; 16: dup            03            ; (ptr ptr)
+; 17: push_s 88      02, 88        ; (ptr ptr 88='X')
+; 19: swap           05            ; (ptr 88 ptr)
+; 20: storeb         83            ; store 'X' at ptr -> (ptr)
+; 21: loadb          82            ; load byte from ptr -> (88)
+; 22: sys 1          96, 1         ; PUTC 'X'
+; 24: push_s 10      02, 10        ; '\n'
+; 26: sys 1          96, 1         ; PUTC '\n'
+; 28: push_s 0       02, 0         ; dummy ptr
+; 30: sys 5          96, 5         ; FREE (no-op)
+; 32: sys 0          96, 0         ; HALT via sys 0
 code_seg:
-    ; main: call outer(5), halt
-    .byte 51, 5, 0, 0
-    .byte 0
-    ; outer: enter 1, push_s 42, storel 0
-    .byte 64, 1
-    .byte 2, 42
-    .byte 67, 0
-    ; calln depth=0, inner(18)
-    .byte 53, 0, 18, 0, 0
-    ; ret 0
-    .byte 52, 0
-    ; inner: enter 0
-    .byte 64, 0
-    ; loadn 1, 0 (read outer's local[0] = '*')
-    .byte 74, 1, 0
-    ; sys PUTC
+    ; LED on
+    .byte 2, 1
+    .byte 96, 3
+    ; LED off
+    .byte 2, 0
+    .byte 96, 3
+    ; GETC + PUTC echo
+    .byte 96, 2
     .byte 96, 1
-    ; push_s 33 ('!'), storen 1, 0 (write to outer's local[0])
-    .byte 2, 33
-    .byte 75, 1, 0
-    ; loadn 1, 0 (read back modified value)
-    .byte 74, 1, 0
-    ; sys PUTC
+    ; Allocate 3 bytes on heap
+    .byte 2, 3
+    .byte 96, 4
+    ; dup ptr, push 'X', swap, storeb
+    .byte 3
+    .byte 2, 88
+    .byte 5
+    .byte 83
+    ; loadb from ptr, PUTC
+    .byte 82
     .byte 96, 1
-    ; push_s 10 (newline), sys PUTC
+    ; newline, PUTC
     .byte 2, 10
     .byte 96, 1
-    ; ret 0
-    .byte 52, 0
+    ; FREE dummy
+    .byte 2, 0
+    .byte 96, 5
+    ; HALT via sys 0
+    .byte 96, 0
 
 ; Globals segment (8 words = 24 bytes)
 globals_seg:
@@ -1890,6 +2049,37 @@ eval_stack:
     .word 0
     .word 0
 
-; Heap (grows upward from here)
+; Heap (grows upward, 96 bytes)
 heap_seg:
-    .byte 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+    .word 0
