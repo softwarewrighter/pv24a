@@ -689,6 +689,88 @@ ge_done:
     la r0, vm_loop
     jmp (r0)
 
+; ============================================================
+; Control flow opcode handlers (0x30-0x32)
+; ============================================================
+
+; 0x30 — jmp addr24: unconditional jump (pc = addr24)
+op_jmp:
+    ; fp = &vm_state
+    lw r0, 18(fp)
+    lw r2, 0(fp)
+    add r0, r2
+    ; r0 = &code[pc]
+    lw r2, 0(r0)
+    ; r2 = addr24 (target)
+    sw r2, 0(fp)
+    ; pc = addr24
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x31 — jz addr24: pop flag, jump if zero
+op_jz:
+    ; fp = &vm_state
+    ; Fetch addr24 from code[pc]
+    lw r0, 18(fp)
+    lw r2, 0(fp)
+    add r0, r2
+    lw r2, 0(r0)
+    ; r2 = addr24
+    push r2
+    ; Advance pc past 3-byte operand
+    lw r0, 0(fp)
+    add r0, 3
+    sw r0, 0(fp)
+    ; Pop flag from eval stack
+    lw r2, 3(fp)
+    add r2, -3
+    sw r2, 3(fp)
+    lw r0, 0(r2)
+    ; r0 = flag
+    ceq r0, z
+    brf jz_skip
+    ; flag == 0: jump (pc = addr24)
+    pop r0
+    sw r0, 0(fp)
+    la r0, vm_loop
+    jmp (r0)
+jz_skip:
+    pop r0
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x32 — jnz addr24: pop flag, jump if nonzero
+op_jnz:
+    ; fp = &vm_state
+    ; Fetch addr24 from code[pc]
+    lw r0, 18(fp)
+    lw r2, 0(fp)
+    add r0, r2
+    lw r2, 0(r0)
+    ; r2 = addr24
+    push r2
+    ; Advance pc past 3-byte operand
+    lw r0, 0(fp)
+    add r0, 3
+    sw r0, 0(fp)
+    ; Pop flag from eval stack
+    lw r2, 3(fp)
+    add r2, -3
+    sw r2, 3(fp)
+    lw r0, 0(r2)
+    ; r0 = flag
+    ceq r0, z
+    brt jnz_skip
+    ; flag != 0: jump (pc = addr24)
+    pop r0
+    sw r0, 0(fp)
+    la r0, vm_loop
+    jmp (r0)
+jnz_skip:
+    pop r0
+    la r0, vm_loop
+    jmp (r0)
+
 ; 0x60 — sys id8: system call dispatch
 op_sys:
     ; fp = &vm_state from dispatch
@@ -808,9 +890,9 @@ dispatch_table:
     .word op_invalid
     .word op_invalid
     ; 0x30-0x35: Control Flow
-    .word op_stub
-    .word op_stub
-    .word op_stub
+    .word op_jmp
+    .word op_jz
+    .word op_jnz
     .word op_stub
     .word op_stub
     .word op_stub
@@ -906,32 +988,40 @@ vm_state:
 ; Memory segments
 ; ============================================================
 
-; Test bytecode: exercises arithmetic, logic, and comparison opcodes
-; Line 1: push_s 7, push_s 6, mul, sys 1 → 42='*' (primary test from step)
-; Line 2: push_s 10, sys 1 → '\n'
-; Line 3: push_s 60, push_s 5, add, sys 1 → 65='A'
-; Line 4: push_s 70, push_s 4, sub, sys 1 → 66='B'
-; Line 5: push_s 67, push_s 1, div, sys 1 → 67='C'
-; Line 6: push_s -68(=188), neg, sys 1 → 68='D'
-; Line 7: push_s 10, sys 1 → '\n'
-; Line 8: push_s 5, push_s 5, eq, push_s 48, add, sys 1 → '1' (5==5)
-; Line 9: push_s 5, push_s 3, lt, push_s 48, add, sys 1 → '0' (5<3 false)
-; Line 10: push_s 3, push_s 5, lt, push_s 48, add, sys 1 → '1' (3<5 true)
-; Line 11: push_s 10, sys 1 → '\n'
-; Line 12: halt
-; Expected UART output: *\nABCD\n101\n
+; Test bytecode: exercises control flow opcodes (jmp, jz, jnz)
+; Countdown loop: push 5, print each digit, decrement, loop until 0
+;
+; Offset  Bytes           Instruction
+; 0       02, 05          push_s 5
+; 2       03              dup              ; loop:
+; 3       49, 20, 0, 0    jz 20           ; → done
+; 7       03              dup
+; 8       02, 48          push_s 48        ; '0'
+; 10      16              add
+; 11      96, 01          sys 1            ; putc digit
+; 13      02, 01          push_s 1
+; 15      17              sub
+; 16      48, 02, 0, 0    jmp 2           ; → loop
+; 20      04              drop             ; done:
+; 21      02, 10          push_s 10        ; '\n'
+; 23      96, 01          sys 1
+; 25      00              halt
+;
+; Expected UART output: 54321\n
 code_seg:
-    .byte 2, 7, 2, 6, 18, 96, 1
-    .byte 2, 10, 96, 1
-    .byte 2, 60, 2, 5, 16, 96, 1
-    .byte 2, 70, 2, 4, 17, 96, 1
-    .byte 2, 67, 2, 1, 19, 96, 1
-    .byte 2, 188, 21, 96, 1
-    .byte 2, 10, 96, 1
-    .byte 2, 5, 2, 5, 32, 2, 48, 16, 96, 1
-    .byte 2, 5, 2, 3, 34, 2, 48, 16, 96, 1
-    .byte 2, 3, 2, 5, 34, 2, 48, 16, 96, 1
-    .byte 2, 10, 96, 1
+    .byte 2, 5
+    .byte 3
+    .byte 49, 20, 0, 0
+    .byte 3
+    .byte 2, 48
+    .byte 16
+    .byte 96, 1
+    .byte 2, 1
+    .byte 17
+    .byte 48, 2, 0, 0
+    .byte 4
+    .byte 2, 10
+    .byte 96, 1
     .byte 0
 
 ; Globals segment (placeholder)
