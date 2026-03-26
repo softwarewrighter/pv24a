@@ -1,0 +1,1 @@
+Build a p-code VM and p-code assembler (pasm) for the COR24 24-bit RISC ISA. The VM is a stack-based interpreter written in COR24 assembly. The pasm tool (also COR24 assembly) assembles human-readable .pasm source into bytecode for testing the VM. Pascal compiler is a separate project.

@@ -1,0 +1,8 @@
+number = 6
+slug = "vm-memory"
+status = "completed"
+description = "Implement loadg/storeg/addrg/addrl and indirect load/store/loadb/storeb. Implement globals segment. Test with hardcoded bytecode: global counter, store/load/print."
+role = "legacy"
+context_files = []
+created_at = "2026-03-25T18:08:45"
+completed_at = "2026-03-25T19:33:18"

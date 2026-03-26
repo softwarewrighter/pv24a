@@ -1,0 +1,8 @@
+number = 7
+slug = "vm-nonlocal"
+status = "completed"
+description = "Implement loadn/storen for static link chain traversal (needed for Pascal nested procedures). Test with hardcoded 2-level nested procedure accessing outer local."
+role = "legacy"
+context_files = []
+created_at = "2026-03-25T18:08:45"
+completed_at = "2026-03-25T19:48:20"

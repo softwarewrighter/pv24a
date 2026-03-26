@@ -1,0 +1,1 @@
+Implemented loadn (0x4A), storen (0x4B), and calln (0x35) opcodes for static link chain traversal supporting Pascal nested procedures. Used nonlocal_temps memory for register-constrained chain traversal. Test verifies 2-level nested procedure accessing outer local: output '*\!\n'. Updated design.md opcode tables.

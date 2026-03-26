@@ -1,0 +1,11 @@
+{
+  "task_type": "cor24-asm",
+  "state": {
+    "number": 1,
+    "step": "vm-scaffold"
+  },
+  "action": "Read tf24a/forth.s for COR24 idioms, read tf24a/docs/inspect-stack-impl.md for full ISA reference (lbu vs lb, ceq vs cls, jal calling convention, valid base registers), read docs/design.md and docs/architecture.md for VM spec, wrote pvm.s, fixed la fp → la r0 + push/pop fp pattern, tested with cor24-run",
+  "result": "success",
+  "reward": 1,
+  "timestamp": "2026-03-25T18:27:23"
+}

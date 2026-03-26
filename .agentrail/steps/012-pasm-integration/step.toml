@@ -1,0 +1,7 @@
+number = 12
+slug = "pasm-integration"
+status = "pending"
+description = "Connect pasm output to VM input. Assemble pasm source into bytecode buffer, then execute. Test with hello.pasm (full puts procedure, data string, main calling puts). First end-to-end test."
+role = "legacy"
+context_files = []
+created_at = "2026-03-25T18:08:45"

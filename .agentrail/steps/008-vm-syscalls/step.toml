@@ -1,0 +1,8 @@
+number = 8
+slug = "vm-syscalls"
+status = "completed"
+description = "Implement remaining sys calls: HALT(0), GETC(2), LED(3), ALLOC(4), FREE(5). Bump allocator for heap. Test: LED toggle, UART echo, heap alloc/write/read."
+role = "legacy"
+context_files = []
+created_at = "2026-03-25T18:08:45"
+completed_at = "2026-03-25T19:55:04"

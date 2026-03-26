@@ -1,0 +1,1 @@
+Project initialized with docs/prd.md, docs/architecture.md, docs/design.md, and agentrail saga. Research from docs/research.txt distilled into concrete VM design with ~35 opcodes, dual-stack architecture, pasm assembler syntax, calling convention, and memory layout.

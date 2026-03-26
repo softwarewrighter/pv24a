@@ -1,0 +1,8 @@
+number = 3
+slug = "vm-arithmetic"
+status = "completed"
+description = "Implement add/sub/mul/div/mod/neg/and/or/xor/not/shl/shr and eq/ne/lt/le/gt/ge opcode handlers. Test with hardcoded bytecode: push 7, push 6, mul, sys PUTC should output ASCII '*' (42)."
+role = "legacy"
+context_files = []
+created_at = "2026-03-25T18:08:45"
+completed_at = "2026-03-25T18:58:18"
