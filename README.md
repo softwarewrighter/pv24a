@@ -6,7 +6,7 @@ Runs on the COR24 emulator ([cor24-rs](https://github.com/sw-embed/cor24-rs)) an
 
 ## Project Status
 
-The VM interpreter is **functional** -- 30+ opcodes implemented, all verified with embedded test bytecode. The p-code assembler (pasm) is not yet started.
+The VM interpreter is **functional** -- 30+ opcodes implemented with trap handling, all verified with embedded test bytecode. The p-code assembler (pasm) lexer is complete.
 
 ### What Works
 
@@ -24,8 +24,7 @@ The VM interpreter is **functional** -- 30+ opcodes implemented, all verified wi
 
 ### What's Next
 
-- Trap handling (div-zero, stack overflow/underflow, invalid opcode)
-- P-code assembler (pasm) -- lexer, parser, two-pass assembly
+- P-code assembler (pasm) -- parser, two-pass assembly (lexer done)
 - Test suite with golden output comparison
 - End-to-end: pasm source -> bytecode -> VM execution
 
@@ -62,6 +61,9 @@ cor24-run --run pvm.s --dump --speed 0
 
 # Trace last N instructions
 cor24-run --run pvm.s --trace 100 --speed 0
+
+# Run pasm lexer with source from UART (EOT = end of input)
+cor24-run --run pasm.s -u "$(printf '.proc main 0\npush 42\nhalt\n.end\n\x04')" --speed 0 -n 5000000
 ```
 
 ## COR24 Architecture at a Glance

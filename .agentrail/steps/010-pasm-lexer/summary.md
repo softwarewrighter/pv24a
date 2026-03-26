@@ -1,0 +1,1 @@
+Created pasm.s with a complete lexer that reads pasm source from UART and tokenizes into 7 types: EOF, NL, NUM, IDENT, DIR, LABEL, COMMA. Uses blocking UART RX with EOT (0x04) for EOF detection. Tested with comprehensive pasm source covering all directive types, mnemonics, labels, commas, negative numbers (-65280), and comments. All tokens recognized correctly.

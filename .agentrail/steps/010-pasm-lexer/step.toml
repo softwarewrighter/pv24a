@@ -1,7 +1,8 @@
 number = 10
 slug = "pasm-lexer"
-status = "in-progress"
+status = "completed"
 description = "Create pasm.s — p-code assembler in COR24 assembly. Start with lexer: read pasm source from UART, tokenize into token types (mnemonic, number, label, directive, newline, comment, eof). Use a token buffer in memory. Test by feeding simple pasm source and dumping token stream."
 role = "legacy"
 context_files = []
 created_at = "2026-03-25T18:08:45"
+completed_at = "2026-03-25T21:19:26"
