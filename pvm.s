@@ -900,6 +900,85 @@ ret_done:
     la r0, vm_loop
     jmp (r0)
 
+; 0x35 — calln depth8 addr24: call with static link chain
+; Like call, but sets the static link based on depth:
+;   depth=0: static link = current fp_vm (calling nested proc)
+;   depth=1: static link = current frame's static link (calling sibling)
+;   depth=N: follow static link chain N-1 times from current static link
+op_calln:
+    ; fp = &vm_state
+    ; Fetch depth8 from code[pc]
+    lw r0, 18(fp)
+    lw r2, 0(fp)
+    add r0, r2
+    lbu r2, 0(r0)
+    ; r2 = depth
+    la r0, nonlocal_temps
+    sw r2, 0(r0)
+    ; nonlocal_temps[0] = depth
+    ; Fetch addr24 from code[pc+1]
+    lw r0, 18(fp)
+    lw r2, 0(fp)
+    add r2, 1
+    add r0, r2
+    lw r2, 0(r0)
+    ; r2 = target address
+    push r2
+    ; Return PC = pc + 4 (1 byte depth + 3 bytes addr24)
+    lw r0, 0(fp)
+    add r0, 4
+    ; Compute static link based on depth
+    ; If depth == 0: static link = current fp_vm
+    la r2, nonlocal_temps
+    lw r1, 0(r2)
+    ; r1 = depth
+    ceq r1, z
+    brt calln_depth_zero
+    ; depth > 0: start from current frame's static link
+    lw r2, 9(fp)
+    lw r2, -6(r2)
+    ; r2 = current frame's static link (one level up)
+    add r1, -1
+    ; Follow chain depth-1 more times
+calln_chain:
+    ceq r1, z
+    brt calln_chain_done
+    lw r2, -6(r2)
+    add r1, -1
+    bra calln_chain
+calln_depth_zero:
+    lw r2, 9(fp)
+    ; r2 = current fp_vm (static link for nested call)
+calln_chain_done:
+    ; r2 = computed static link
+    ; r0 = return PC
+    la r1, nonlocal_temps
+    sw r2, 3(r1)
+    ; nonlocal_temps[3] = static link
+    ; Build frame header on call stack
+    lw r2, 6(fp)
+    ; r2 = csp
+    sw r0, 0(r2)
+    ; frame[0] = return PC
+    lw r0, 9(fp)
+    sw r0, 3(r2)
+    ; frame[3] = dynamic link (current fp_vm)
+    la r0, nonlocal_temps
+    lw r0, 3(r0)
+    sw r0, 6(r2)
+    ; frame[6] = static link
+    lw r0, 3(fp)
+    sw r0, 9(r2)
+    ; frame[9] = saved esp
+    ; Advance csp by 12 (frame header size)
+    add r2, 12
+    sw r2, 6(fp)
+    ; Set pc = target
+    pop r0
+    sw r0, 0(fp)
+    la r0, vm_loop
+    jmp (r0)
+
 ; 0x40 — enter nlocals8: set fp_vm = csp, reserve local slots
 op_enter:
     ; fp = &vm_state
@@ -1201,6 +1280,142 @@ op_storea:
     la r0, vm_loop
     jmp (r0)
 
+; 0x4A — loadn depth8 off8: load nonlocal via static link chain
+; Follow static link chain 'depth' times from current fp_vm,
+; then load local[off] from the found frame.
+; Static link is at fp_vm - 6 in each frame.
+op_loadn:
+    ; fp = &vm_state
+    ; Fetch depth byte from code[pc]
+    lw r0, 18(fp)
+    lw r2, 0(fp)
+    add r0, r2
+    lbu r2, 0(r0)
+    ; r2 = depth
+    la r0, nonlocal_temps
+    sw r2, 0(r0)
+    ; nonlocal_temps[0] = depth
+    ; Fetch off byte from code[pc+1]
+    lw r0, 18(fp)
+    lw r2, 0(fp)
+    add r2, 1
+    add r0, r2
+    lbu r2, 0(r0)
+    ; r2 = off
+    la r0, nonlocal_temps
+    sw r2, 3(r0)
+    ; nonlocal_temps[3] = off
+    ; Advance pc by 2
+    lw r0, 0(fp)
+    add r0, 2
+    sw r0, 0(fp)
+    ; Traverse static link chain: start at fp_vm
+    lw r0, 9(fp)
+    ; r0 = current frame pointer
+    la r2, nonlocal_temps
+    lw r1, 0(r2)
+    ; r1 = depth
+loadn_chain:
+    ceq r1, z
+    brt loadn_done
+    ; Follow static link: frame_fp - 6
+    lw r0, -6(r0)
+    add r1, -1
+    bra loadn_chain
+loadn_done:
+    ; r0 = target frame's fp_vm
+    ; Compute target address: fp_vm + off * 3
+    la r2, nonlocal_temps
+    lw r2, 3(r2)
+    ; r2 = off
+    mov r1, r2
+    add r1, r1
+    add r1, r2
+    ; r1 = off * 3
+    add r0, r1
+    ; r0 = target address
+    lw r2, 0(r0)
+    ; r2 = value
+    ; Push onto eval stack
+    lw r0, 3(fp)
+    sw r2, 0(r0)
+    add r0, 3
+    sw r0, 3(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; 0x4B — storen depth8 off8: store nonlocal via static link chain
+; Follow static link chain 'depth' times from current fp_vm,
+; then store eval stack TOS into local[off] of the found frame.
+op_storen:
+    ; fp = &vm_state
+    ; Fetch depth byte from code[pc]
+    lw r0, 18(fp)
+    lw r2, 0(fp)
+    add r0, r2
+    lbu r2, 0(r0)
+    ; r2 = depth
+    la r0, nonlocal_temps
+    sw r2, 0(r0)
+    ; nonlocal_temps[0] = depth
+    ; Fetch off byte from code[pc+1]
+    lw r0, 18(fp)
+    lw r2, 0(fp)
+    add r2, 1
+    add r0, r2
+    lbu r2, 0(r0)
+    ; r2 = off
+    la r0, nonlocal_temps
+    sw r2, 3(r0)
+    ; nonlocal_temps[3] = off
+    ; Advance pc by 2
+    lw r0, 0(fp)
+    add r0, 2
+    sw r0, 0(fp)
+    ; Pop value from eval stack
+    lw r2, 3(fp)
+    add r2, -3
+    sw r2, 3(fp)
+    lw r0, 0(r2)
+    ; r0 = value to store
+    la r2, nonlocal_temps
+    sw r0, 6(r2)
+    ; nonlocal_temps[6] = value
+    ; Traverse static link chain: start at fp_vm
+    lw r0, 9(fp)
+    ; r0 = current frame pointer
+    la r2, nonlocal_temps
+    lw r1, 0(r2)
+    ; r1 = depth
+storen_chain:
+    ceq r1, z
+    brt storen_done
+    lw r0, -6(r0)
+    add r1, -1
+    bra storen_chain
+storen_done:
+    ; r0 = target frame's fp_vm
+    ; Compute target address: fp_vm + off * 3
+    la r2, nonlocal_temps
+    lw r2, 3(r2)
+    ; r2 = off
+    mov r1, r2
+    add r1, r1
+    add r1, r2
+    ; r1 = off * 3
+    add r0, r1
+    ; r0 = target address
+    push r0
+    ; Retrieve value from temp
+    la r0, nonlocal_temps
+    lw r0, 6(r0)
+    ; r0 = value
+    pop r2
+    ; r2 = target address
+    sw r0, 0(r2)
+    la r0, vm_loop
+    jmp (r0)
+
 ; ============================================================
 ; Indirect Memory Access opcode handlers (0x50-0x53)
 ; ============================================================
@@ -1407,7 +1622,7 @@ dispatch_table:
     .word op_jnz
     .word op_call
     .word op_ret
-    .word op_stub
+    .word op_calln
     ; 0x36-0x3F: reserved (gap)
     .word op_invalid
     .word op_invalid
@@ -1430,8 +1645,8 @@ dispatch_table:
     .word op_addrg
     .word op_loada
     .word op_storea
-    .word op_stub
-    .word op_stub
+    .word op_loadn
+    .word op_storen
     ; 0x4C-0x4F: reserved (gap)
     .word op_invalid
     .word op_invalid
@@ -1487,6 +1702,17 @@ ret_temps:
     ; [9] has_rv flag
 
 ; ============================================================
+; Temporary storage for nonlocal handlers (3 words = 9 bytes)
+; ============================================================
+nonlocal_temps:
+    .word 0
+    ; [0] depth
+    .word 0
+    ; [3] off (or static link for calln)
+    .word 0
+    ; [6] value (for storen)
+
+; ============================================================
 ; VM state struct (9 words = 27 bytes)
 ; ============================================================
 vm_state:
@@ -1531,20 +1757,57 @@ vm_state:
 ; 30: halt              00
 ;
 ; Expected UART output: AB\n
+; Test: 2-level nested procedure with nonlocal access
+; Expected output: *!\n  (outer stores '*' in local, inner reads it,
+; modifies to '!', reads back)
+;
+; main:       byte 0: call outer(5)     51, 5, 0, 0
+;             byte 4: halt               0
+; outer:      byte 5: enter 1           64, 1
+;             byte 7: push_s 42         2, 42
+;             byte 9: storel 0          67, 0
+;             byte 11: calln 0, inner(18) 53, 0, 18, 0, 0
+;             byte 16: ret 0            52, 0
+; inner:      byte 18: enter 0          64, 0
+;             byte 20: loadn 1, 0       74, 1, 0
+;             byte 23: sys 1            96, 1
+;             byte 25: push_s 33        2, 33
+;             byte 27: storen 1, 0      75, 1, 0
+;             byte 30: loadn 1, 0       74, 1, 0
+;             byte 33: sys 1            96, 1
+;             byte 35: push_s 10        2, 10
+;             byte 37: sys 1            96, 1
+;             byte 39: ret 0            52, 0
 code_seg:
-    .byte 2, 65
-    .byte 69, 0, 0, 0
-    .byte 68, 0, 0, 0
+    ; main: call outer(5), halt
+    .byte 51, 5, 0, 0
+    .byte 0
+    ; outer: enter 1, push_s 42, storel 0
+    .byte 64, 1
+    .byte 2, 42
+    .byte 67, 0
+    ; calln depth=0, inner(18)
+    .byte 53, 0, 18, 0, 0
+    ; ret 0
+    .byte 52, 0
+    ; inner: enter 0
+    .byte 64, 0
+    ; loadn 1, 0 (read outer's local[0] = '*')
+    .byte 74, 1, 0
+    ; sys PUTC
     .byte 96, 1
-    .byte 2, 66
-    .byte 71, 0, 0, 0
-    .byte 81
-    .byte 71, 0, 0, 0
-    .byte 80
+    ; push_s 33 ('!'), storen 1, 0 (write to outer's local[0])
+    .byte 2, 33
+    .byte 75, 1, 0
+    ; loadn 1, 0 (read back modified value)
+    .byte 74, 1, 0
+    ; sys PUTC
     .byte 96, 1
+    ; push_s 10 (newline), sys PUTC
     .byte 2, 10
     .byte 96, 1
-    .byte 0
+    ; ret 0
+    .byte 52, 0
 
 ; Globals segment (8 words = 24 bytes)
 globals_seg:

@@ -67,7 +67,8 @@ All comparisons push 1 (true) or 0 (false):
 | `jmp` addr24 | 4 bytes | ( -- ) | Unconditional jump |
 | `jz` addr24 | 4 bytes | ( flag -- ) | Jump if zero |
 | `jnz` addr24 | 4 bytes | ( flag -- ) | Jump if nonzero |
-| `call` addr24 | 4 bytes | ( args... -- ) | Call procedure |
+| `call` addr24 | 4 bytes | ( args... -- ) | Call procedure (static link = 0) |
+| `calln` depth8 addr24 | 5 bytes | ( args... -- ) | Call with static link (depth=0: nested, depth=N: N levels up) |
 | `ret` nargs8 | 2 bytes | ( [retval] -- [retval] ) | Return, clean nargs |
 | `halt` | 1 byte | ( -- ) | Stop VM |
 | `trap` code8 | 2 bytes | ( -- ) | Trigger trap |
@@ -285,7 +286,8 @@ Opcodes are assigned sequential byte values:
 | 0x32 | jnz | addr24 |
 | 0x33 | call | addr24 |
 | 0x34 | ret | nargs8 |
-| 0x35 | trap | code8 |
+| 0x35 | calln | depth8 addr24 |
+| 0x36 | trap | code8 |
 | 0x40 | enter | nlocals8 |
 | 0x41 | leave | — |
 | 0x42 | loadl | off8 |
