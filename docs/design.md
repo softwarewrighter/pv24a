@@ -219,6 +219,19 @@ done:
 | `.proc` | `.proc NAME nlocals` | Begin procedure (nlocals = local slot count) |
 | `.end` | `.end` | End procedure |
 
+### 5.2.1 Module Metadata Directives
+
+These directives are emitted by the linker (pl24r) for cross-module symbol resolution. pasm silently skips them — they do not affect assembly.
+
+| Directive | Syntax | Description |
+|-----------|--------|-------------|
+| `.module` | `.module NAME` | Declare compilation unit name |
+| `.export` | `.export SYMBOL` | Mark symbol as visible to other modules |
+| `.extern` | `.extern SYMBOL` | Declare external symbol dependency |
+| `.endmodule` | `.endmodule` | End module declaration |
+
+These are part of the .spc format contract for the toolchain pipeline: `p24p → pl24r → pasm/pa24r → pv24a`. See [[P24Toolchain]] on the coordination wiki for details.
+
 ### 5.3 Labels
 
 Labels appear on their own line, ending with `:`:

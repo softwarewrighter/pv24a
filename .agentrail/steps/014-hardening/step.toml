@@ -1,6 +1,6 @@
 number = 14
 slug = "hardening"
-status = "pending"
+status = "in-progress"
 description = "Fix bugs found by test suite. Add stack depth checking. Validate memory bounds. Clean up diagnostic output. Ensure all tests pass. Final documentation update."
 role = "legacy"
 context_files = []

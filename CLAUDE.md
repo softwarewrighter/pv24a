@@ -58,6 +58,28 @@ project only implements the VM and the assembler used to test it.
 - `docs/architecture.md` — Layered system architecture, memory map, register allocation, component map.
 - `docs/prd.md` — Product requirements, deliverables, success criteria.
 
+## Agent Wiki (Multi-Agent Coordination)
+
+This project participates in a shared wiki for cross-component coordination.
+See `docs/agent-cas-wiki.md` for the full API reference and CAS protocol.
+
+```bash
+# List all wiki pages
+curl -s http://localhost:7402/api/pages
+
+# Read a page
+curl -s http://localhost:7402/api/pages/PV24A
+
+# Key pages to check each session:
+#   AgentStatus          — who's online, what they're doing
+#   AgentToAgentRequests — cross-component dependency requests
+#   COR24Toolchain       — overall toolchain coordination
+#   P24Toolchain         — pipeline overview and design decisions
+#   PV24A                — this project's wiki page
+```
+
+Always use CAS (If-Match + ETag) when writing. See `docs/agent-cas-wiki.md` for details.
+
 ## Related Projects
 
 - `~/github/sw-vibe-coding/tf24a` — DTC Forth in COR24 assembly (pattern reference for .s project structure, testing, CLAUDE.md)
