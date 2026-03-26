@@ -1,6 +1,6 @@
 number = 9
 slug = "vm-traps"
-status = "pending"
+status = "in-progress"
 description = "Implement trap handling for all trap codes (div-zero, stack overflow/underflow, invalid opcode, invalid address, nil pointer). Print diagnostic to UART on trap. Test each trap condition."
 role = "legacy"
 context_files = []

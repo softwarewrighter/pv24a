@@ -182,9 +182,27 @@ vm_halted:
     la r2, uart_puts_final
     jal r1, (r2)
 vm_trapped:
-    la r0, msg_trap
-    la r2, uart_puts_final
+    ; Print "TRAP " prefix (uart_puts preserves r1)
+    la r0, msg_trap_prefix
+    la r2, uart_puts
     jal r1, (r2)
+    ; Load trap_code from vm_state
+    la r0, vm_state
+    push r0
+    pop fp
+    lw r0, 24(fp)
+    ; Convert to ASCII digit (codes 0-7)
+    add r0, 48
+    ; Print digit via uart_putc
+    la r2, uart_putc
+    jal r1, (r2)
+    ; Print newline
+    lc r0, 10
+    la r2, uart_putc
+    jal r1, (r2)
+    ; Halt
+    la r0, halt_loop
+    jmp (r0)
 
 ; uart_puts_final — print string then enter halt loop
 ; r0 = string address. Does not return.
@@ -211,7 +229,23 @@ halt_loop:
     bra halt_loop
 
 ; ============================================================
-; Opcode handlers (all stubs for now)
+; vm_trap — centralized trap handler
+; r0 = trap code (0-7). Sets status=2, trap_code=r0, returns to vm_loop.
+; ============================================================
+vm_trap:
+    push r0
+    la r0, vm_state
+    push r0
+    pop fp
+    lc r0, 2
+    sw r0, 21(fp)
+    pop r0
+    sw r0, 24(fp)
+    la r0, vm_loop
+    jmp (r0)
+
+; ============================================================
+; Opcode handlers
 ; ============================================================
 
 ; 0x00 — halt: set status=1, return to vm_loop
@@ -238,8 +272,16 @@ op_push:
     lw r0, 0(fp)
     add r0, 3
     sw r0, 0(fp)
-    ; Push r2 onto eval stack
+    ; Check eval stack overflow before push
     lw r2, 3(fp)
+    la r0, heap_seg
+    clu r2, r0
+    brt push_no_overflow
+    pop r0
+    lc r0, 2
+    la r2, vm_trap
+    jmp (r2)
+push_no_overflow:
     ; r2 = esp
     pop r0
     sw r0, 0(r2)
@@ -262,8 +304,16 @@ op_push_s:
     lw r0, 0(fp)
     add r0, 1
     sw r0, 0(fp)
-    ; Push r2 onto eval stack
+    ; Check eval stack overflow before push
     lw r2, 3(fp)
+    la r0, heap_seg
+    clu r2, r0
+    brt push_s_no_overflow
+    pop r0
+    lc r0, 2
+    la r2, vm_trap
+    jmp (r2)
+push_s_no_overflow:
     pop r0
     sw r0, 0(r2)
     add r2, 3
@@ -287,6 +337,15 @@ op_dup:
 ; 0x04 — drop: discard top of eval stack
 op_drop:
     ; fp = &vm_state from dispatch
+    ; Check eval stack underflow: esp must be > eval_stack base
+    lw r2, 3(fp)
+    la r0, eval_stack
+    clu r0, r2
+    brt drop_no_underflow
+    lc r0, 3
+    la r2, vm_trap
+    jmp (r2)
+drop_no_underflow:
     lw r2, 3(fp)
     add r2, -3
     sw r2, 3(fp)
@@ -377,12 +436,9 @@ op_div:
     ceq r2, z
     brf div_ok
     pop r0
-    lc r0, 2
-    sw r0, 21(fp)
     lc r0, 1
-    sw r0, 24(fp)
-    la r0, vm_loop
-    jmp (r0)
+    la r2, vm_trap
+    jmp (r2)
 div_ok:
     ; Compute sign of result: xor sign bits of a and b
     mov r0, r1
@@ -439,12 +495,9 @@ op_mod:
     ceq r2, z
     brf mod_ok
     pop r0
-    lc r0, 2
-    sw r0, 21(fp)
     lc r0, 1
-    sw r0, 24(fp)
-    la r0, vm_loop
-    jmp (r0)
+    la r2, vm_trap
+    jmp (r2)
 mod_ok:
     ; Save sign of dividend (remainder sign = dividend sign)
     cls r1, z
@@ -1428,7 +1481,13 @@ op_load:
     add r2, -3
     sw r2, 3(fp)
     lw r0, 0(r2)
-    ; r0 = address
+    ; r0 = address — nil pointer check
+    ceq r0, z
+    brf load_not_nil
+    lc r0, 6
+    la r2, vm_trap
+    jmp (r2)
+load_not_nil:
     lw r2, 0(r0)
     ; r2 = value at address
     ; Push onto eval stack
@@ -1446,7 +1505,13 @@ op_store:
     lw r2, 3(fp)
     add r2, -3
     lw r0, 0(r2)
-    ; r0 = addr
+    ; r0 = addr — nil pointer check
+    ceq r0, z
+    brf store_not_nil
+    lc r0, 6
+    la r2, vm_trap
+    jmp (r2)
+store_not_nil:
     push r0
     ; Pop val from eval stack
     add r2, -3
@@ -1467,7 +1532,13 @@ op_loadb:
     add r2, -3
     sw r2, 3(fp)
     lw r0, 0(r2)
-    ; r0 = address
+    ; r0 = address — nil pointer check
+    ceq r0, z
+    brf loadb_not_nil
+    lc r0, 6
+    la r2, vm_trap
+    jmp (r2)
+loadb_not_nil:
     lbu r2, 0(r0)
     ; r2 = byte (zero-extended)
     ; Push onto eval stack
@@ -1485,7 +1556,13 @@ op_storeb:
     lw r2, 3(fp)
     add r2, -3
     lw r0, 0(r2)
-    ; r0 = addr
+    ; r0 = addr — nil pointer check
+    ceq r0, z
+    brf storeb_not_nil
+    lc r0, 6
+    la r2, vm_trap
+    jmp (r2)
+storeb_not_nil:
     push r0
     ; Pop byte from eval stack
     add r2, -3
@@ -1712,17 +1789,29 @@ sys_free:
     la r0, vm_loop
     jmp (r0)
 
-; Invalid opcode: set status=2, trap_code=4 (INVALID_OPCODE)
+; 0x36 — trap code8: trigger trap with explicit code
+op_trap:
+    ; fp = &vm_state from dispatch
+    ; Fetch trap code byte from code[pc]
+    lw r0, 18(fp)
+    lw r2, 0(fp)
+    add r0, r2
+    lbu r2, 0(r0)
+    ; r2 = trap code
+    ; Increment pc past operand
+    lw r0, 0(fp)
+    add r0, 1
+    sw r0, 0(fp)
+    ; Trigger trap
+    mov r0, r2
+    la r2, vm_trap
+    jmp (r2)
+
+; Invalid opcode: trap code 4 (INVALID_OPCODE)
 op_invalid:
-    la r0, vm_state
-    push r0
-    pop fp
-    lc r0, 2
-    sw r0, 21(fp)
     lc r0, 4
-    sw r0, 24(fp)
-    la r0, vm_loop
-    jmp (r0)
+    la r2, vm_trap
+    jmp (r2)
 
 ; Stub handler — all unimplemented opcodes trap as invalid
 op_stub:
@@ -1795,8 +1884,9 @@ dispatch_table:
     .word op_call
     .word op_ret
     .word op_calln
-    ; 0x36-0x3F: reserved (gap)
-    .word op_invalid
+    ; 0x36: trap
+    .word op_trap
+    ; 0x37-0x3F: reserved (gap)
     .word op_invalid
     .word op_invalid
     .word op_invalid
@@ -1856,9 +1946,9 @@ msg_halted:
     .byte 72, 65, 76, 84, 10, 0
     ; "HALT\n\0"
 
-msg_trap:
-    .byte 84, 82, 65, 80, 10, 0
-    ; "TRAP\n\0"
+msg_trap_prefix:
+    .byte 84, 82, 65, 80, 32, 0
+    ; "TRAP \0" (space, no newline — code digit and \n printed separately)
 
 ; ============================================================
 ; Temporary storage for ret handler (4 words = 12 bytes)
@@ -1915,57 +2005,37 @@ vm_state:
 ; Memory segments
 ; ============================================================
 
-; Test bytecode: syscalls — LED, GETC echo, heap alloc/write/read, HALT
-; Provide UART input "A" for GETC test
-; Expected UART output: AX\n
+; Test bytecode: trap handling
+; Expected UART output: PVM OK\nOK\nTRAP 0\n
 ;
-;  0: push_s 1       02, 1         ; LED state = 1
-;  2: sys 3          96, 3         ; LED(1) — turn on
-;  4: push_s 0       02, 0         ; LED state = 0
-;  6: sys 3          96, 3         ; LED(0) — turn off
-;  8: sys 2          96, 2         ; GETC -> char on stack
-; 10: sys 1          96, 1         ; PUTC echo char
-; 12: push_s 3       02, 3         ; size = 3 bytes
-; 14: sys 4          96, 4         ; ALLOC(3) -> ptr
-; 16: dup            03            ; (ptr ptr)
-; 17: push_s 88      02, 88        ; (ptr ptr 88='X')
-; 19: swap           05            ; (ptr 88 ptr)
-; 20: storeb         83            ; store 'X' at ptr -> (ptr)
-; 21: loadb          82            ; load byte from ptr -> (88)
-; 22: sys 1          96, 1         ; PUTC 'X'
-; 24: push_s 10      02, 10        ; '\n'
-; 26: sys 1          96, 1         ; PUTC '\n'
-; 28: push_s 0       02, 0         ; dummy ptr
-; 30: sys 5          96, 5         ; FREE (no-op)
-; 32: sys 0          96, 0         ; HALT via sys 0
+; Test 1: Print "OK\n" to confirm VM is running, then trigger user trap
+;
+;  0: push_s 79      02, 79        ; 'O'
+;  2: sys 1          96, 1         ; PUTC
+;  4: push_s 75      02, 75        ; 'K'
+;  6: sys 1          96, 1         ; PUTC
+;  8: push_s 10      02, 10        ; '\n'
+; 10: sys 1          96, 1         ; PUTC
+; 12: trap 0         54, 0         ; USER_TRAP (code 0)
+; 14: sys 0          96, 0         ; HALT (should not reach here)
+;
+; Other trap tests (change bytecode to test each):
+;   DIV_ZERO:       push_s 1, push_s 0, div  → TRAP 1
+;   STACK_OVERFLOW: (fill stack past limit)   → TRAP 2
+;   STACK_UNDERFLOW: drop (on empty stack)    → TRAP 3
+;   INVALID_OPCODE: .byte 0xFF               → TRAP 4
+;   NIL_POINTER:    push_s 0, load           → TRAP 6
 code_seg:
-    ; LED on
-    .byte 2, 1
-    .byte 96, 3
-    ; LED off
-    .byte 2, 0
-    .byte 96, 3
-    ; GETC + PUTC echo
-    .byte 96, 2
+    ; Print "OK\n"
+    .byte 2, 79
     .byte 96, 1
-    ; Allocate 3 bytes on heap
-    .byte 2, 3
-    .byte 96, 4
-    ; dup ptr, push 'X', swap, storeb
-    .byte 3
-    .byte 2, 88
-    .byte 5
-    .byte 83
-    ; loadb from ptr, PUTC
-    .byte 82
+    .byte 2, 75
     .byte 96, 1
-    ; newline, PUTC
     .byte 2, 10
     .byte 96, 1
-    ; FREE dummy
-    .byte 2, 0
-    .byte 96, 5
-    ; HALT via sys 0
+    ; trap 0 (USER_TRAP) — opcode 0x36 = 54 decimal
+    .byte 54, 0
+    ; HALT (unreachable)
     .byte 96, 0
 
 ; Globals segment (8 words = 24 bytes)
