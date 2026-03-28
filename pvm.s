@@ -57,13 +57,9 @@ _start:
     la r0, heap_seg
     sw r0, 15(fp)
 
-    ; code = guest_code_base if non-zero, else code_seg
-    la r2, guest_code_base
-    lw r0, 0(r2)
-    ceq r0, z
-    brf use_guest_code
-    la r0, code_seg
-use_guest_code:
+    ; code = indirect via code_ptr (patchable for external .p24 loading)
+    la r0, code_ptr
+    lw r0, 0(r0)
     sw r0, 18(fp)
 
     ; status = 0 (running)
@@ -2025,12 +2021,12 @@ vm_state:
 ; 14: sys 0          96, 0         ; HALT (should not reach here)
 ;
 ; Other trap tests (change bytecode to test each):
-; Guest code base — set to non-zero by --load-binary to override code_seg.
-; Usage: cor24-run --run pvm.s --load-binary hello.bin@0x010000
-;   then set guest_code_base to 0x010000 (65536 decimal).
-; When zero (default), VM uses built-in code_seg.
-guest_code_base:
-    .word 0
+; code_ptr — indirection for code segment base address.
+; Default: points to built-in code_seg.
+; For external .p24: patch this word to the load address (e.g., 0x010000)
+; using --load-binary or --patch before execution starts.
+code_ptr:
+    .word code_seg
 
 ;   DIV_ZERO:       push_s 1, push_s 0, div  → TRAP 1
 ;   STACK_OVERFLOW: (fill stack past limit)   → TRAP 2
