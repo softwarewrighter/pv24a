@@ -140,4 +140,4 @@ fp = memory base for indexed loads/stores
 - Status register: -65279 (0xFF0101)
 - TX busy: bit 7 (sign bit when sign-extended via `lb`)
 - RX ready: bit 0
-- LED port: -65024 (0xFF0200)
+- LED/Switch port: -65536 (0xFF0000)

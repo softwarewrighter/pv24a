@@ -3846,7 +3846,7 @@ sys_led:
     ; r2 = new esp = &TOS
     lw r0, 0(r2)
     ; r0 = LED state
-    la r2, -65024
+    la r2, -65536
     sb r0, 0(r2)
     la r0, vm_loop
     jmp (r0)

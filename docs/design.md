@@ -177,7 +177,7 @@ Simple and explicit:
 
 .const UART_DATA  -65280      ; named constant
 .const UART_STATUS -65279
-.const LED_PORT   -65024
+.const LED_PORT   -65536
 
 .global counter 1             ; 1 word of global storage
 .global buffer 32             ; 32 words

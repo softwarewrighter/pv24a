@@ -95,7 +95,7 @@ pv24a/
 0xFEF7FF └──────────────────────┘
 0xFF0100   UART data register
 0xFF0101   UART status register
-0xFF0200   LED port
+0xFF0000   LED/Switch port (write=LED D2, read=button S2)
 ```
 
 ## Register Allocation (COR24 → VM)

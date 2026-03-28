@@ -1971,7 +1971,7 @@ Something like this would work well:
 
 .const UART_DATA   0xFF0100
 .const UART_STATUS 0xFF0101
-.const LED_PORT    0xFF0200
+.const LED_PORT    0xFF0000
 
 .proc putc
     ; arg0 at fp-1

@@ -36,7 +36,7 @@ The VM runs on the COR24 emulator (`cor24-run`) and eventually on FPGA hardware.
 - **Assembler/Emulator**: `cor24-run` from cor24-rs/cor24-bin
 - **Memory**: 1 MB SRAM + 3 KB EBR stack + memory-mapped I/O
 - **Cell size**: 3 bytes (24-bit words)
-- **I/O**: UART at 0xFF0100/0xFF0101, LED at 0xFF0200
+- **I/O**: UART at 0xFF0100/0xFF0101, LED/Switch at 0xFF0000
 
 ## Deliverables
 
