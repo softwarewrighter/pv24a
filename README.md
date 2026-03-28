@@ -6,27 +6,30 @@ Runs on the COR24 emulator ([cor24-rs](https://github.com/sw-embed/cor24-rs)) an
 
 ## Project Status
 
-The VM interpreter is **functional** -- 30+ opcodes implemented with trap handling, all verified with embedded test bytecode. The p-code assembler (pasm) lexer is complete.
+The VM and assembler are **fully functional** with end-to-end execution: `.spc` source → p-code bytecode → VM execution, all verified by a 10-test suite with golden output comparison.
 
-### What Works
+### Components
 
-- Stack operations: push, push_s, dup, drop, swap, over
-- Arithmetic: add, sub, mul, div, mod, neg
-- Bitwise: and, or, xor, not, shl, shr
-- Comparison: eq, ne, lt, le, gt, ge (push 1/0)
-- Control flow: jmp, jz, jnz
-- Procedures: call, calln, ret, enter, leave
-- Local/argument access: loadl, storel, loada, storea
-- Global access: loadg, storeg, addrg, addrl
-- Nonlocal access: loadn, storen (static link chain traversal for nested Pascal procedures)
-- Indirect memory: load, store, loadb, storeb
-- System calls: HALT, PUTC, GETC, LED, ALLOC (bump allocator), FREE
+| File | Description |
+|------|-------------|
+| `pvm.s` | P-code VM interpreter — 30+ opcodes, trap handling, dynamic binary loading |
+| `pasm.s` | Standalone two-pass p-code assembler |
+| `pvmasm.s` | Integrated assembler+VM — assembles `.spc` source and executes in one step |
+| `demo.sh` | Test harness with 10 golden-output tests and single-file runner |
 
-### What's Next
+### Instruction Set
 
-- P-code assembler (pasm) -- parser, two-pass assembly (lexer done)
-- Test suite with golden output comparison
-- End-to-end: pasm source -> bytecode -> VM execution
+- **Stack**: push, push_s, dup, drop, swap, over
+- **Arithmetic**: add, sub, mul, div, mod, neg
+- **Bitwise**: and, or, xor, not, shl, shr
+- **Comparison**: eq, ne, lt, le, gt, ge (push 1/0)
+- **Control flow**: jmp, jz, jnz
+- **Procedures**: call, calln, ret, enter, leave
+- **Locals/args**: loadl, storel, loada, storea
+- **Globals**: loadg, storeg, addrg, addrl
+- **Nonlocal access**: loadn, storen (static link chain for nested Pascal procedures)
+- **Indirect memory**: load, store, loadb, storeb
+- **System calls**: HALT, PUTC, GETC, LED, ALLOC (bump allocator), FREE
 
 ## Related
 
@@ -50,21 +53,26 @@ The VM interpreter is **functional** -- 30+ opcodes implemented with trap handli
 Requires [cor24-rs](https://github.com/sw-embed/cor24-rs) (`cor24-run` binary).
 
 ```bash
-# Assemble and run the VM with embedded test bytecode
+# Run the test suite (10 tests with golden output comparison)
+./demo.sh
+
+# Assemble and run a single .spc file via the integrated assembler+VM
+./demo.sh run hello.spc
+
+# Run the VM with its embedded test bytecode
 cor24-run --run pvm.s --speed 0
 
-# With UART input (for GETC testing)
-cor24-run --run pvm.s -u 'A' --speed 0 -n 5000000
+# Assemble .spc source directly via pvmasm.s (assembles + executes)
+cor24-run --run pvmasm.s -u "$(cat hello.spc)"$'\x04' --speed 0 -n 10000000
 
-# Dump CPU state after halt
+# Dump CPU state or trace execution
 cor24-run --run pvm.s --dump --speed 0
-
-# Trace last N instructions
 cor24-run --run pvm.s --trace 100 --speed 0
-
-# Run pasm lexer with source from UART (EOT = end of input)
-cor24-run --run pasm.s -u "$(printf '.proc main 0\npush 42\nhalt\n.end\n\x04')" --speed 0 -n 5000000
 ```
+
+### Examples
+
+See `examples/` for sample `.spc` programs and `tests/` for the test suite inputs.
 
 ## COR24 Architecture at a Glance
 
