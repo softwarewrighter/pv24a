@@ -3845,7 +3845,10 @@ sys_led:
     sw r2, 3(fp)
     ; r2 = new esp = &TOS
     lw r0, 0(r2)
-    ; r0 = LED state
+    ; r0 = LED state (1=on, 0=off from caller)
+    ; Hardware is active-low: invert bit 0 before writing
+    lc r2, 1
+    xor r0, r2
     la r2, -65536
     sb r0, 0(r2)
     la r0, vm_loop
