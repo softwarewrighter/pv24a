@@ -110,9 +110,10 @@ System call IDs:
 | 0 | HALT | ( -- ) | Stop execution |
 | 1 | PUTC | ( char -- ) | Write byte to UART |
 | 2 | GETC | ( -- char ) | Read byte from UART (blocking) |
-| 3 | LED | ( state -- ) | Write LED state |
+| 3 | LED | ( state -- ) | Write LED D2 state (bit 0) |
 | 4 | ALLOC | ( size -- ptr ) | Bump-allocate heap block |
 | 5 | FREE | ( ptr -- ) | Free heap block (no-op in bump mode) |
+| 6 | READ_SWITCH | ( -- state ) | Read button S2 state (bit 0: 1=released, 0=pressed) |
 
 ### 2.8 Argument Access
 
