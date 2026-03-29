@@ -1751,6 +1751,9 @@ sys_read_switch:
     lbu r0, 0(r2)
     lc r2, 1
     and r0, r2
+    ; Hardware is active-low: invert bit 0 so 1=pressed, 0=not pressed
+    lc r2, 1
+    xor r0, r2
     ; Push result onto eval stack
     lw r2, 3(fp)
     sw r0, 0(r2)

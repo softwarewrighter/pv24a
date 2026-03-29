@@ -9,7 +9,7 @@
 set -euo pipefail
 
 PVMASM="pvmasm.s"
-MAX_INSN=10000000
+MAX_INSN=20000000
 PASS=0
 FAIL=0
 SKIP=0
@@ -109,6 +109,11 @@ run_tests() {
     echo "${BOLD}Advanced:${NC}"
     check "t09-bitwise"  "tests/t09-bitwise.spc"  "OKOKOKOK"
     check "t10-traps"    "tests/t10-traps.spc"    "TRAP 1"
+
+    echo ""
+    echo "${BOLD}Linked programs:${NC}"
+    check "merged-int"   "tests/merged_int.spc"   "42"
+    check "merged-str"   "tests/merged_str.spc"   "Hello"
 
     echo ""
     echo "────────────────────────────"
