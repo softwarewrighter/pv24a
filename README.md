@@ -6,7 +6,7 @@ Runs on the COR24 emulator ([cor24-rs](https://github.com/sw-embed/cor24-rs)) an
 
 ## Project Status
 
-The VM and assembler are **fully functional** with end-to-end execution: `.spc` source → p-code bytecode → VM execution, all verified by a 10-test suite with golden output comparison.
+The VM and assembler are **fully functional** with end-to-end execution: `.spc` source → p-code bytecode → VM execution, all verified by a 12-test suite with golden output comparison (including linked multi-module programs).
 
 ### Components
 
@@ -15,7 +15,7 @@ The VM and assembler are **fully functional** with end-to-end execution: `.spc` 
 | `pvm.s` | P-code VM interpreter — 30+ opcodes, trap handling, dynamic binary loading |
 | `pasm.s` | Standalone two-pass p-code assembler |
 | `pvmasm.s` | Integrated assembler+VM — assembles `.spc` source and executes in one step |
-| `demo.sh` | Test harness with 10 golden-output tests and single-file runner |
+| `demo.sh` | Test harness with 12 golden-output tests and single-file runner |
 
 ### Instruction Set
 
@@ -29,7 +29,7 @@ The VM and assembler are **fully functional** with end-to-end execution: `.spc` 
 - **Globals**: loadg, storeg, addrg, addrl
 - **Nonlocal access**: loadn, storen (static link chain for nested Pascal procedures)
 - **Indirect memory**: load, store, loadb, storeb
-- **System calls**: HALT, PUTC, GETC, LED, ALLOC (bump allocator), FREE
+- **System calls**: HALT, PUTC, GETC, LED, ALLOC (bump allocator), FREE, READ_SWITCH
 
 ## Related
 
@@ -53,7 +53,7 @@ The VM and assembler are **fully functional** with end-to-end execution: `.spc` 
 Requires [cor24-rs](https://github.com/sw-embed/cor24-rs) (`cor24-run` binary).
 
 ```bash
-# Run the test suite (10 tests with golden output comparison)
+# Run the test suite (12 tests with golden output comparison)
 ./demo.sh
 
 # Assemble and run a single .spc file via the integrated assembler+VM
@@ -63,7 +63,7 @@ Requires [cor24-rs](https://github.com/sw-embed/cor24-rs) (`cor24-run` binary).
 cor24-run --run pvm.s --speed 0
 
 # Assemble .spc source directly via pvmasm.s (assembles + executes)
-cor24-run --run pvmasm.s -u "$(cat hello.spc)"$'\x04' --speed 0 -n 10000000
+cor24-run --run pvmasm.s -u "$(cat hello.spc)"$'\x04' --speed 0 -n 20000000
 
 # Dump CPU state or trace execution
 cor24-run --run pvm.s --dump --speed 0

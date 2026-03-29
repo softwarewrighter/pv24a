@@ -1,8 +1,0 @@
-number = 13
-slug = "test-suite"
-status = "completed"
-description = "Create full test suite: tests/t01-arith.pasm through t10-traps.pasm. Create demo.sh test harness with golden output comparison (following tf24a pattern). Create examples/hello.pasm, examples/blink.pasm, examples/echo.pasm."
-role = "legacy"
-context_files = []
-created_at = "2026-03-25T18:08:45"
-completed_at = "2026-03-26T09:53:19"

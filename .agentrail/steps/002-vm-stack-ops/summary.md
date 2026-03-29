@@ -1,1 +1,0 @@
-Implemented 7 p-code opcode handlers: push (24-bit imm), push_s (sign-extended 8-bit), dup, drop, swap, over, and sys PUTC. Updated dispatch table, fixed far-branch for bounds check, test bytecode prints Hi!!X* confirming all ops. Documented .spc/.p24 file extensions.

@@ -1,1 +1,0 @@
-Created full test suite (t01-t10), demo.sh harness with golden output comparison, and example programs (hello, echo, blink). Discovered 512-byte input buffer limit in pvmasm.s requiring compact test sources. All 10 tests pass.

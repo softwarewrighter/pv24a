@@ -1,1 +1,0 @@
-Hardened assembler: input buffer 512→2048, code buffer 512→2048, data buffer 128→512, name pool 256→512, symbol table 32→64 entries with overflow protection. Documented metadata directives (.module/.export/.extern/.endmodule) in docs/design.md. Added agent wiki section to CLAUDE.md. Completed REQ-005 and REQ-006. All 10 tests pass.

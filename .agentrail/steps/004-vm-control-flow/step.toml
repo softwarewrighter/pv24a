@@ -1,8 +1,0 @@
-number = 4
-slug = "vm-control-flow"
-status = "completed"
-description = "Implement jmp/jz/jnz opcode handlers. Test with hardcoded countdown loop: push 5, loop: dup, jz done, push_s 1, sub, jmp loop, done: halt."
-role = "legacy"
-context_files = []
-created_at = "2026-03-25T18:08:45"
-completed_at = "2026-03-25T19:01:22"
